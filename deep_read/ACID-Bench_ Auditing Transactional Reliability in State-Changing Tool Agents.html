@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACID-Bench 精读笔记 · 李沐方法论</title>
+  <script>
+    MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    body { max-width: 860px; margin: 0 auto; padding: 2rem; font-family: 'Georgia', serif; color: #222; line-height: 1.75; background: #fafaf8; }
+    h1 { font-size: 1.6rem; border-bottom: 2px solid #333; padding-bottom: 0.4rem; margin-top: 2rem; }
+    h2 { font-size: 1.2rem; color: #444; margin-top: 1.8rem; }
+    h3 { font-size: 1rem; color: #555; }
+    .paper-card { background: #f0ede6; border-left: 4px solid #8b7355; padding: 1rem 1.2rem; border-radius: 4px; margin: 1.2rem 0; }
+    .paper-card p { margin: 0.3rem 0; }
+    .claim-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .claim-table th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    .claim-table td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.78rem; font-family: monospace; }
+    .badge-strong { background: #d4edda; color: #155724; }
+    .badge-weak   { background: #fff3cd; color: #856404; }
+    .badge-unsup  { background: #f8d7da; color: #721c24; }
+    .mermaid { margin: 1.2rem 0; }
+    blockquote { border-left: 3px solid #bbb; margin: 1rem 0; padding: 0.5rem 1rem; color: #555; font-style: italic; }
+    code { background: #f0ede6; padding: 0.1rem 0.3rem; border-radius: 2px; font-size: 0.88em; }
+    pre { background: #f0ede6; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .tag { display: inline-block; background: #e8e4db; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.8rem; margin: 0.1rem; }
+    nav { position: sticky; top: 0; background: #fafaf8ee; border-bottom: 1px solid #ddd; padding: 0.5rem 0; margin-bottom: 1.5rem; font-size: 0.85rem; z-index: 10; }
+    nav a { margin-right: 1rem; color: #5a4a3a; text-decoration: none; }
+    nav a:hover { text-decoration: underline; }
+    .footnote { font-size: 0.82rem; color: #777; border-top: 1px solid #ddd; margin-top: 2.5rem; padding-top: 0.8rem; }
+    table.crit { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.crit th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    table.crit td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#card">Paper Card</a>
+  <a href="#overview">整体认知</a>
+  <a href="#method">方法</a>
+  <a href="#ledger">证据账本</a>
+  <a href="#critique">批判评价</a>
+  <a href="#use">研究用途</a>
+  <a href="#appendix">附录图</a>
+</nav>
+
+<h1>ACID-Bench：有状态工具型 Agent 的事务可靠性审计基准（精读）</h1>
+
+<div class="paper-card" id="card">
+  <p><strong>标题：</strong>ACID-Bench: Auditing Transactional Reliability in State-Changing Tool Agents</p>
+  <p><strong>作者 / 机构：</strong>Andrei Vince（单作者）· University of North Carolina at Charlotte</p>
+  <p><strong>Venue / 年份：</strong>Workshop 基准论文（文中自述 “A workshop benchmark paper”）；文件夹标注 kdd2026，推断为 KDD 2026 关联 workshop（inferred，未在正文明确给出会议名）。2026。</p>
+  <p><strong>来源：</strong>本地 PDF · 9 页 · 仅含 Table 1–7，无独立 Figure（故方法/流程以 Mermaid 替代原图）</p>
+  <p><strong>领域 / 任务：</strong>Agent 评测基准 / 方法论 + 实证校准；面向会修改持久状态的工具型 agent 的事务可靠性（atomicity / consistency / isolation / durability 视角）</p>
+  <p><strong>一句话论文：</strong>任务是否“成功”会高估有状态工具 agent 的可靠性；ACID-Bench 用「确定性故障注入 + 无 LLM judge 的基于状态评估 + 有效性记账协议」把故障暴露、事务完整性、安全交接、无效证据分开度量。</p>
+  <p>
+    <span class="tag">benchmark</span><span class="tag">agent-eval</span><span class="tag">fault-injection</span>
+    <span class="tag">state-based-eval</span><span class="tag">validity-accounting</span><span class="tag">methodology</span>
+  </p>
+  <p><strong>阅读决策：</strong><span class="badge badge-weak">精读</span> 理由：作为「评测方法论」论文，其价值在于论证链与实验设计的严谨性（刻意保守、负责任的局限声明），适合用三遍读法拆「问题→主张→理由→证据→局限」并审查其自陈的校准证据。</p>
+</div>
+
+<h2 id="overview">整体认知</h2>
+
+<p><strong>问题。</strong>会改持久状态的工具型 agent（取消订单、改地址、订票）即便对话“看起来成功”，也可能留下重复写入、过期读、部分提交、验证不足等状态损坏。现有多数 agent 基准（Tau-Bench、WebArena、AgentBench 等）度量的是“用户目标是否达成”，对<em>事务可靠性</em>而言这只是必要非充分条件：工作流可以到达奖励态，却留下未对账的部分提交或基于过期证据的状态更新。</p>
+
+<p><strong>先前局限。</strong>作者指出许多 agent 基准只报聚合任务成功率，很少把“任务完成”与“状态完整性”、“故障暴露”与“干净恢复”、“有效证据”与“无效证据”分开。结果是一个对话层面的成功可能掩盖底层状态损坏，且非匹配/污染样本容易被悄悄并表成“分数”。</p>
+
+<p><strong>核心思想。</strong>把这类失败当作一个<em>测量问题</em>而非模型排名问题。给定工具层暴露一个确定性事务故障，看 agent 是否：（1）暴露了该故障、（2）完成任务、（3）保住状态完整性、（4）在需要时收集并验证了证据、（5）避免把污染静默折算成干净分数。借用 ACID 词汇作可靠性透镜，但明确<em>不是</em>数据库 ACID 合规测试，评估对象是“agent 在可变工具上的行为”。</p>
+
+<p><strong>主要贡献（4 条测量贡献）。</strong>(1) 52 个确定性故障注入场景（零售+航空，钉在 Tau-Bench 任务上）；(2) 一个记录状态 delta 与场景契约、不使用 LLM judge 的 trace schema + evaluator；(3) 一套有效性记账协议，把“晋升终态记录 / 低层尝试与重试 / 表有效性 / 交互结果 / 完整性标签 / 质量告警”分离；(4) 校准与报告控制：带赋值标签的合成契约摘要 fixture、配对的 20 场景 overlay/无overlay 消融、以及放在行为计数之后的可选二级诊断。</p>
+
+<p><strong>主要证据（务必小心的读数）。</strong>5 个模型条件档 × 3 次运行 = 780 条晋升终态记录（底层 800 次尝试）。核心计数：SCP（Strict Clean Pass）= 234/780；525 条带完整性违规标签；配对消融在固定单模型上得到澄清 overlay 27/60 vs 基础 prompt 2/60。作者反复强调：这些只构成“确定性评估与记账框架的交叉条件/内部一致性证据”，<em>不构成构念效度，也不构成决定性的模型或厂商排名</em>。</p>
+
+<h2 id="method">方法</h2>
+
+<p>论文无独立 Figure，以下用 Mermaid 重构其架构与流程（依据正文 §3–§6 还原，非原文图）。</p>
+
+<h3>1. 故障族 → ACID 契约映射（架构）</h3>
+<div class="mermaid">
+flowchart TD
+  A[用户目标: 有状态变更的工具任务<br/>钉在 Tau-Bench 零售/航空任务] --> B[配置的确定性故障注入]
+  B --> C1[Atomicity / 部分提交<br/>后续写失败]
+  B --> C2[Consistency & 重试幂等 / 幽灵成功<br/>写已提交但返回错误]
+  B --> C3[Isolation / 过期读<br/>读与依赖写之间状态变化]
+  B --> C4[Durability / 崩溃重启<br/>写提交后丢失上下文]
+  B --> C5[Consequence / 高危组合<br/>证据·验证·预算·危害]
+  C1 --> D1[部分写之后补偿/对账]
+  C2 --> D2[重试前查状态, 避免重复副作用]
+  C3 --> D3[行动前刷新/验证]
+  C4 --> D4[从持久态恢复并验证终态]
+  C5 --> D5[收集证据·验证·守预算·避害]
+  D1 & D2 & D3 & D4 & D5 --> E[Trace Schema 记录: 工具名/参数/真实结果/<br/>agent可见结果/注入故障/前后状态快照/提示条件/溯源哈希]
+  E --> F[Evaluator: 确定性·基于状态·无 LLM judge]
+</div>
+
+<h3>2. 评估与有效性记账流水线</h3>
+<div class="mermaid">
+flowchart LR
+  subgraph 静态审计
+    S1[场景声明: id/域/Tau任务id/故障计划/<br/>成功工具/评估契约/overlay要求]
+  end
+  subgraph 跟踪审计
+    T1[配置故障是否真的触发?<br/>trace元数据是否匹配声明条件?<br/>状态delta是否满足/违反契约?]
+  end
+  S1 --> T1
+  T1 --> R[晋升终态记录<br/>promoted final row record]
+  R --> M[Manifest 审查: 隔离不同提示条件/<br/>场景库存/评估契约, 防非匹配行并入]
+  M --> O[分离记账维度]
+  O --> O1[ACID 场景局部成功]
+  O --> O2[事务完整性 integrity-violation 标签]
+  O --> O3[表有效性 table-valid]
+  O --> O4[交互结果: 故障暴露/安全交接/无效或非暴露/运行时失败]
+  O --> O5[质量告警 chain warnings]
+  O --> O6[后果诊断: 证据/验证/预算/危害]
+</div>
+
+<h3>3. Strict Clean Pass 的记账交集</h3>
+<div class="mermaid">
+flowchart TD
+  P[晋升终态记录] --> Q1{表有效 table-valid?}
+  Q1 -->|否| X[不计入 SCP]
+  Q1 -->|是| Q2{ACID 场景局部成功?}
+  Q2 -->|否| X
+  Q2 -->|是| Q3{无完整性违规标签?}
+  Q3 -->|否| X
+  Q3 -->|是| Y[SCP = 交集<br/>234/780 含18条安全交接]
+  Y -.-> Z[注: SCP 是记账交集,<br/>非严格自主恢复度量;<br/>不要求原始 fault_exposed 交互结果]
+</div>
+
+<p><strong>关键设计选择（方法论亮点）。</strong></p>
+<ul>
+  <li><strong>确定性故障注入而非采样。</strong>故障是“配置”的；若配置故障未触发，该记录被标为“无效故障暴露 / 污染”，<em>不</em>折算成干净的模型成功。这是把污染显式化的核心。</li>
+  <li><strong>因果可达性准入规则。</strong>每个故障族设计为“从用户目标自然可达”；若任务无需经过该注入点即可完成，则场景太弱、应予收窄或排除。该规则把基准维持在“评审可审计的事务失败”而非“任意陷阱提示”。</li>
+  <li><strong>三量分离。</strong>ACID 局部成功、事务完整性、表有效性是常被混为一谈的三个量，被显式拆开；交互结果（安全交接等）也不定义 SCP。</li>
+  <li><strong>Manifest 审查。</strong>把历史 ACID 提交号、Tau 溯源、场景库存、提示条件、评估版本写入 manifest，使非匹配行被当作“不同条件”而非静默并入同表——防御常见的可复现性失败。</li>
+  <li><strong>合成校准 fixture。</strong>带赋值标签的契约摘要（非由 agent 执行产生），仅检验聚合与报告分离是否保留，不声称构念效度或策略性能。</li>
+</ul>
+
+<blockquote>论文原话（核心 thesis）：“Task success can overestimate state-changing agent reliability unless fault exposure, transactional integrity, safe handoff, and invalid evidence are measured and reported separately.”</blockquote>
+
+<h2 id="ledger">证据账本</h2>
+
+<table class="claim-table">
+  <thead>
+    <tr><th>主张 / 计数</th><th>证据</th><th>强度</th><th>注意事项</th><th>待验证</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ACID 局部成功与 Tau reward 是两回事（任务成功≠状态可靠）</td>
+      <td>780 条晋升记录中 285 条两者分歧：44 条 ACID 成功/Tau 失败，241 条 ACID 失败/Tau 成功</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>分歧只证明“指标不同”，不证明 ACID 标签天然更优；属确定性记账</td>
+      <td>在公开 trace 上复算 285 分歧分布</td>
+    </tr>
+    <tr>
+      <td>5 档条件整体 SCP = 234/780；各档 36/156–57/156</td>
+      <td>Table 6 五档模型条件 accounting；Wilson 95% 区间 36.5%[29.4,44.3] 与 23.1%[17.2,30.3] 重叠</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>微平均计数；区间重叠且作者明言“不估计 run 间模型/厂商方差”；小计数差异脆弱；原始 trace 未公开</td>
+      <td>同条件多次复跑 + 不确定度分析</td>
+    </tr>
+    <tr>
+      <td>澄清 overlay 显著改变恢复行为：27/60 vs 2/60 SCP（配对 27-only / 2-only / 0-both / 31-neither）</td>
+      <td>固定 DeepSeek V4 Flash thinking-max 条件的 20 场景配对消融，3 次复跑</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>仅单模型；overlay 本身即要求“重试前复查/写后验证”，等于把被评行为写进提示——更接近提示工程杠杆，而非模型固有恢复能力；难以泛化</td>
+      <td>多模型 + 多 overlay 设置的配对消融</td>
+    </tr>
+    <tr>
+      <td>合成 fixture 能保住标签聚合分离（task-only → 0/52 SCP）</td>
+      <td>Table 5：5 个带赋值标签的契约摘要 fixture，聚合器正确返回对应 SCP</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>仅检验聚合/报告分离，不建立场景可解性或策略性能；非运行 agent 得到</td>
+      <td>—（作者已自陈边界）</td>
+    </tr>
+    <tr>
+      <td>“无晋升终态记录带 runtime_failure” ⇒ 零运行失败</td>
+      <td>正文明确：该终态事实“不意味零运行失败”，因尝试日志含 20 次失败尝试影响 14 行</td>
+      <td><span class="badge badge-unsup">unsupported</span></td>
+      <td>这是<em>读者易误读</em>的命题，论文自身已驳斥；完整性标签在 98 条安全交接、92 条无效/非暴露上也出现，未必都是“暴露故障后的完整性失败”</td>
+      <td>单独报告 attempt 级失败率</td>
+    </tr>
+    <tr>
+      <td>安全交接与 SCP 不互斥（18 条安全交接满足 SCP）</td>
+      <td>确定性记账：18 条 safe-handoff 记录同时满足 SCP 交集</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>说明单一 ACID 成功数字会掩盖这些差异；属设计正确性</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>Manifest 审查防止污染并表</td>
+      <td>设计层面：非匹配 overlay/场景库存/评估契约被当作不同条件而非并入</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>依赖人工审查；底层行证据/原始 trace 未公开，外部无法独立验证其审查结论</td>
+      <td>公开 manifest + 原始 trace 供第三方复核</td>
+    </tr>
+    <tr>
+      <td>ACID-Bench 支持决定性的模型/厂商排名</td>
+      <td>论文明确否定：需更广推理路由与模型覆盖、不确定度分析、稳定配置、跨条件重复无overlay消融</td>
+      <td><span class="badge badge-unsup">unsupported</span></td>
+      <td>这是<em>读者易越界得出</em>的结论；论文定位为“测量方法贡献”而非排名；SCP 是记账交集，非自主恢复/自动化就绪度量</td>
+      <td>见 §7.5 Claim Boundary</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="critique">批判评价</h2>
+
+<table class="crit">
+  <thead><tr><th>维度</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>优点</strong></td>
+      <td>
+        <ul>
+          <li><strong>有效性记账纪律值得复用：</strong>把“故障暴露 / 安全交接 / 无效或非暴露”分开报告，而非静默并入分母，是负责任的评测方法论，可迁移到任何 agent 可靠性基准。</li>
+          <li><strong>负责任的保守声明：</strong>明确“非部署安全认证、非 DB ACID 合规测试、非决定性模型排名”，并设独立“Falsifiability”小节列出可证伪条件。</li>
+          <li><strong>确定性、无 LLM judge：</strong>打分可复现、可审计（原则上），规避 LLM 评审者噪声与偏差。</li>
+          <li><strong>因果准入规则：</strong>要求故障对用户目标“因果必要”，避免任意陷阱提示，提升评审可审计性。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺点</strong></td>
+      <td>
+        <ul>
+          <li><strong>证据基础不公开：</strong>原始 trace、行级证据、本地研究材料均未发布；历史 ACID 提交号在隐私改写后已不可从当前 Git 溯源。外部核实不可能，且为单作者本地验证。</li>
+          <li><strong>消融仅单模型 + overlay 自指：</strong>27/60 vs 2/60 这最抢眼的结果建立在单模型（DeepSeek V4 Flash thinking-max）上，且 overlay 本身即指示“重试前复查/写后验证”——几乎等于把被评估行为写进提示，混淆了“提示工程杠杆”与“模型固有恢复能力”。</li>
+          <li><strong>构念效度存疑：</strong>ACID 是比喻性透镜而非字面 DB ACID；18 行跟踪审计中 7 个边缘标签显示“触发匹配比语义任务路径更严”，可能把语义合法路径误判为无效。</li>
+          <li><strong>计数脆弱：</strong>Wilson 区间重叠、每档仅 3 次复跑且不估计 run 间方差；234/780 为微平均，小差异不可靠。</li>
+          <li><strong>领域窄：</strong>仅零售与航空；无支付、医疗、工业控制或长程企业流程。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>隐含假设</strong></td>
+      <td>
+        <ul>
+          <li>确定性脚本用户策略 + 澄清 overlay 能代表“真实”运行条件（作者承认它们也塑造行为）。</li>
+          <li>Tau-Bench 零售/航空任务足以代表一般性事务可靠性。</li>
+          <li>完整性违规标签在“安全交接 / 无效-非暴露”结果上出现仍有意义——可能放大“完整性问题”叙事。</li>
+          <li>模型名（DeepSeek V4 Flash / DeepSeek Pro / MiniMax M2.7 / Kimi K2.6）为非标准/疑似匿名化名，叠加不公开 trace 使第三方验证几乎不可行。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>复现风险</strong></td>
+      <td>
+        <ul>
+          <li>实现与 52 个已校验场景契约“本地准备、拟 MIT 许可”，但无已验证公开仓库或 camera-ready 附录。</li>
+          <li>复现精确总数需“在指定条件下重新运行”或未来归档证据发布；历史 ACID 提交号不可从当前 Git 恢复运行期源码快照。</li>
+          <li>晋升要求隔离目录、运行与评估同模型配置、提示条件元数据、场景库存检查、manifest 审查——任一缺失都会破坏可复现性。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺失对照</strong></td>
+      <td>
+        <ul>
+          <li>无“无故障”基线对照以隔离故障注入本身的效应。</li>
+          <li>消融仅 1 个模型，无跨模型配对对照。</li>
+          <li>无 LLM-judge 交叉校验，无法判断状态评估器是否漏判语义合法但形式违约的恢复。</li>
+          <li>无支付/医疗等关键域，结论外推受限。</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="use">研究用途</h2>
+
+<p><strong>可复用的设计。</strong></p>
+<ul>
+  <li><strong>有效性记账分类法：</strong>晋升终态记录 vs 低层尝试/重试 vs 表有效性 vs 交互结果 vs 完整性标签 vs 质量告警——任何 agent 可靠性基准都应照搬这一维度分离。</li>
+  <li><strong>Manifest 审查护栏：</strong>用历史提交号/溯源/场景库存/提示条件/评估版本防止非匹配样本污染并表。</li>
+  <li><strong>因果准入规则：</strong>“故障必须对主张必要”的场景审查标准，可迁移。</li>
+  <li><strong>确定性、基于状态的评估（无 LLM judge）：</strong>在可形式化规格的场景中优先采用，提升可审计性。</li>
+  <li><strong>合成校准 fixture：</strong>用赋值标签的假数据专门检验聚合/报告是否保住分离，是低成本的 pipeline 自检。</li>
+</ul>
+
+<p><strong>应规避的设计。</strong></p>
+<ul>
+  <li>不要把 SCP / 聚合分当成“自主恢复”或“自动化就绪”度量来宣传。</li>
+  <li>不要将“非暴露/无效”记录静默并入干净分母或当成模型失败。</li>
+  <li>不要仅凭微平均小计数做模型/厂商排名。</li>
+  <li>不要把 ACID 比喻当字面数据库语义使用。</li>
+</ul>
+
+<p><strong>后续 / 相关论文。</strong></p>
+<ul>
+  <li>Tau-Bench（工具-agent-用户交互基准，本基准的场景来源）：<a href="https://arxiv.org/abs/2406.12045">arXiv:2406.12045</a></li>
+  <li>Tau2-Bench（双控环境扩展）：<a href="https://arxiv.org/abs/2506.07982">arXiv:2506.07982</a></li>
+  <li>ToolEmu（LM 模拟沙盒研究高风险工具风险）：<a href="https://arxiv.org/abs/2309.15817">arXiv:2309.15817</a></li>
+  <li>WebArena / WorkArena / AgentBench / GAIA / SWE-Bench / BrowseComp（互补的广度型 agent 基准）</li>
+  <li>系统动机：Sagas（[5] Garcia-Molina & Salem 1987）、幂等 API（[4] Featonby 2020）、故障注入（[7] Hsueh et al. 1997）、事务恢复（[6] Haerder & Reuter 1983）</li>
+</ul>
+
+<p><strong>可能的研究方向。</strong></p>
+<ul>
+  <li>把基准扩展到支付、医疗、工业控制等关键域，并接入实时上市后监控管线（论文已点名的互补方向）。</li>
+  <li>更广推理路由 + 模型覆盖、重复无overlay消融 + 不确定度分析，以支撑（而非声称）模型选择证据。</li>
+  <li>用 LLM-judge 做交叉校验，检验状态评估器是否漏判语义合法但形式违约的恢复。</li>
+  <li>概率性/对抗性故障注入，替代纯确定性注入，检验更真实的分布漂移。</li>
+</ul>
+
+<h2 id="appendix">附录图</h2>
+<p>本文为纯表格型论文（Table 1–7），<strong>无任何独立 Figure</strong>，故无原图可内嵌。方法节已用三张 Mermaid 图替代原图，覆盖：故障族→ACID 映射架构、评估与记账流水线、SCP 记账交集。Table 6（五档模型条件 accounting）与 Table 7（20 场景配对消融）为正文核心计数表，已在上文证据账本与方法节引用，建议回看 PDF 第 7 页原表核对分母与分解。</p>
+
+<p class="footnote">Generated by mli-paper-reading skill · 2026-08-11 · 基于 PDF 原文 9 页逐页通读 + 三遍读法（问题→主张→理由→证据→局限）· 论文含 Table 1–7 无 Figure，架构/流程以 Mermaid 替代。</p>
+
+<script>mermaid.initialize({startOnLoad:true, theme:'neutral'});</script>
+</body>
+</html>

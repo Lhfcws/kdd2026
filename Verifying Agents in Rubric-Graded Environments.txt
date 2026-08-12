@@ -1,0 +1,2085 @@
+Verifying Agents in Rubric-Graded Environments
+Markus Dücker
+
+Vaibhav Kumar
+
+Yi Liu
+
+Handshake AI Research
+USA
+markus@joinhandshake.com
+
+Handshake AI Research
+USA
+vaibhav@joinhandshake.com
+
+Handshake AI Research
+USA
+yi@joinhandshake.com
+
+Ronak Chaudhary
+
+Andreas Plesner
+
+Francisco Guzmán
+
+Handshake AI Research
+USA
+ronak@joinhandshake.com
+
+Handshake AI Research
+USA
+ETH Zürich
+Switzerland
+aplesner@ethz.ch
+
+Handshake AI Research
+USA
+paco@joinhandshake.com
+
+Anish Athalye
+Handshake AI Research
+USA
+anish.athalye@joinhandshake.com
+
+Abstract
+
+performance. Measurement and optimization go hand-in-hand: tooluse agents are evaluated within environments, and these same environments can be used for reinforcement learning (RL) to train
+improved models [38]. While some agentic benchmarks such as
+GDPval [46] are human-graded using pairwise preferences, enabling comparison between agents on leaderboards, the vast majority strive for automated pointwise grading, facilitating both
+benchmarking and reinforcement learning by using the grade as
+the reward signal.
+Early efforts, encouraged by the success of reinforcement learning with verifiable rewards (RLVR) [13, 56], focused on verifiable
+domains where deterministic automated verification is possible. For
+example, SWE-bench [21] uses unit tests to verify software engineering, HotpotQA [71] uses exact-match scoring for multi-hop
+question-answering, and WebArena [80] uses programmatic checks
+for browser use. Such environments trade off verifiability against
+scope, open-endedness, and realism.
+Recently, agent evaluation has expanded into semi-verifiable domains where judgment is required. Benchmarks such as BankerToolBench [25], APEX-Agents [61], CoreCraft [42], and ClawBench [77]
+use natural-language rubrics—fine-grained binary criteria that are
+objectively gradable—as a technique to define and capture correctness [12, 17, 62].
+Verifying agent rollouts in such environments is a challenging
+task in its own right. Agents may produce multi-file deliverables
+(e.g., an Excel spreadsheet and a PowerPoint presentation) and
+invoke tools with side effects (e.g., sending an email). Verification
+requires checking diverse properties such as: whether an email was
+sent, whether an Excel model’s formulas propagate correctly across
+tabs, and whether a PowerPoint’s charts are internally consistent
+with the underlying data.
+Verifiers for rubric-graded environments span a broad design
+space, ranging from using an LLM-as-a-judge on the trajectory [42]
+to making the verifier itself agentic: an agent-as-a-judge [75, 83].
+Agentic judges themselves range from workflows (e.g., Archipelago [61])
+
+As AI agents take on increasingly open-ended and complex tasks,
+verifying their outputs has proven to be difficult. Rubric-graded
+agent environments—where a verifier judges multiple criteria against
+the deliverables and environment state changes produced by the
+agent—have emerged as a popular paradigm. We conduct the first
+systematic study of verifiers for rubric-graded agent environments.
+First, we create BankerVerifierBench (BVB), a meta-evaluation
+dataset of 3,204 human-judged rubric criteria across 21 investmentbanking tasks. Next, we develop a methodology that derives from
+any rubric corpus the capabilities a verifier should possess, yielding a nine-capability taxonomy that we distill into three general
+design principles—reactive verification, environment alignment,
+and domain guidance—which we implement in Gandalf, an opensource verifier. Finally, we evaluate Gandalf against existing verifiers on BVB. We find that Gandalf outperforms all baselines on
+seven of nine capabilities and is Pareto optimal: its cheapest configuration (F1 0.633, $42) exceeds the most expensive baseline (F1 0.538,
+$414). Ablations show that environment alignment and domain
+guidance primarily reduce cost (up to 4× fewer tokens) rather than
+error, while architecture choice dominates model choice. Gandalf
+generalizes to an OpenClaw benchmark, a structurally different
+personal-productivity environment, achieving F1 score 0.951 and
+outperforming the next-best verifier by 7.5 F1 points.
+
+Keywords
+agentic verification, agents-as-a-judge, LLM-as-a-judge, rubric-based
+evaluation, agent benchmarks, verifiers
+
+1
+
+Introduction
+
+Modern AI agents are systems that use large language models
+(LLMs) to interact with tools and environments in pursuit of a
+goal [10, 54, 73]. As these agents have grown increasingly capable and reliable, so too has the need to measure and optimize their
+1
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+to fully reactive agents [73] (e.g., ClawBench [77]). Despite growing interest from both research and industry, existing benchmarks
+treat the verifier as a subproblem—a means to grade rollouts or
+supply training rewards—rather than as an object of study. This
+gap, combined with the broad design space, motivates studying
+these verifiers in their own right.
+To the best of our knowledge, we conduct the first systematic
+study of verifiers for agents in rubric-graded environments. To enable this, we produce a dataset of human annotations, analogous to
+prior work on meta-evaluation of LLM judging and rubric-based
+evaluation [43, 60]. The dataset consists of agent trajectories and
+final environment states (containing file deliverables), along with
+rubric criteria and human-produced judgments, across a number of
+tasks in the BankerToolBench (BTB) [25] agent environment. We
+call this verifier evaluation dataset BankerVerifierBench (BVB). We
+publicly release BVB, which consists of 3,204 judgment instances
+across 21 tasks, to facilitate future work on evaluating and improving verifiers for rubric-graded environments.
+We develop a methodology to analyze rubrics and identify the
+raw capabilities a verifier needs to judge the criteria in a dataset.
+Applying this methodology to BVB, we identify nine capabilities
+that lead us to three general design principles for verifiers in rubricgraded environments. We implement these principles in Gandalf 1 ,
+a new open-source verifier for agent environments.
+Our evaluation shows that Gandalf achieves state-of-the-art performance on BVB. We explain this performance through the lens of
+our design principles and capability taxonomy, finding that Gandalf
+achieves the best performance in seven of nine capabilities. Furthermore, Gandalf generalizes to new domains: we evaluate the verifier
+on an internal OpenClaw dataset and find that it achieves state-ofthe-art performance on all six of six capabilities and remains Pareto
+optimal.
+
+2
+
+SEC EDGAR API, and a company-profile API, alongside a filesystem and pre-installed libraries such as openpyxl and python-pptx),
+and is expected to produce multi-file deliverables in standard office
+formats (.xlsx, .pptx, .docx, .pdf) accompanied by an expertauthored rubric of binary, weighted criteria. BTB rollouts are a
+demanding setting for verification: judging a single criterion may
+require joint reasoning across multiple heterogeneous artifacts.
+Verifiers for rubric-graded environments. We study three opensource verifiers that engage with the deliverable to different degrees. AutoRubric [51] grades each criterion in an independent LLM
+call over the agent’s trajectory, with no access to the deliverable.
+Archipelago [61], released with APEX-Agents, captures a filesystem
+diff between initial and final environment states, extracts visual
+content via the Reducto document extraction service, and grades
+each criterion in an independent LLM call over the diff and extracted visuals without interacting with the deliverable directly.
+Agent-as-a-Judge [83] employs a workflow-based agent as the evaluator, planning and executing steps such as locating and reading
+files to reach a verdict.
+
+3
+
+BankerVerifierBench: Meta-evaluation for
+rubric-graded environments
+
+We introduce BankerVerifierBench (BVB), the first meta-evaluation
+dataset for verifiers in rubric-graded agent environments. BVB extends prior meta-evaluation work for LLM judges [43, 60] and agent
+trajectories [37] to settings where criteria require inspecting multifile binary deliverables and tool-mediated environment state rather
+than text alone. The dataset consists of 21 tasks drawn from the
+BTB task distribution, spanning the product groups and task types
+described in Section 2. Each task ships with an expert-authored
+rubric of binary criteria, weighted by importance and tagged with
+one of six categories; rubrics range from 47 to 286 criteria per task
+(median 160), totaling 3,204 criteria across the corpus. Each task is
+paired with one agent rollout, captured as the complete trajectory
+(messages, tool calls, tool responses) and the final environment
+state including all deliverable files in their native binary formats.
+Every criterion receives a binary verdict (met/unmet) from a domain expert as ground-truth: an initial 6 tasks (493 criteria) were
+graded by two reviewers independently with a senior reviewer
+issuing a master verdict (inter-annotator agreement 89.5%), and the
+remaining 15 tasks (2,711 criteria) were graded by a single reviewer
+plus senior master verdict; met-class prevalence on the full corpus
+is 78.7%.
+
+Background
+
+In a rubric-graded agent environment, an agent receives a task and
+acts within a structured environment (e.g., a filesystem, a set of
+tools, and access to external data) to produce a deliverable, which
+may consist of one or more files together with changes to the
+environment. A verifier is then asked to assign a binary met/unmet
+judgment to each criterion in the task’s natural-language rubric.
+This contrasts with deterministically graded agent benchmarks,
+where criteria reduce to executable checks. Rubric-graded criteria
+are open-ended natural-language descriptions whose judgment
+often requires inspection of the deliverable, domain knowledge,
+and qualitative assessment. We adopt BankerToolBench (BTB) as
+the basis for our study and select three representative verifiers as
+objects of study.
+
+4
+
+BankerToolBench (BTB) environment. BTB [25] is a recently released benchmark of 100 end-to-end analytical workflows performed by junior investment bankers, including discounted cashflow analyses, leveraged-buyout models, trading comparables, and
+merger models. Each task is long-horizon, taking a banker 5 hours
+on average. The agent receives a task description, a data room of
+pre-loaded files, and a fixed set of tools (a market-data platform, an
+
+Deriving requirements for verifiers from data
+
+Tasks in rubric-graded agent environments come paired with a
+rubric of natural-language criteria. Rather than fixing a verifier architecture in advance and determining its capabilities, we start from
+the rubric and ask what capabilities does a verifier need to have. We
+describe a general methodology for deriving verifier requirements
+from any rubric corpus, then apply it to BVB. The methodology produces a taxonomy of verifier-side capabilities: each capability names
+a kind of check the verifier must perform to judge a criterion correctly. The taxonomy is verifier-side (labels describe what a verifier
+
+1 https://github.com/Handshake-AI-Research/gandalf-the-grader
+
+2
+
+Verifying Agents in Rubric-Graded Environments
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea
+
+5
+
+must check, not what the agent must produce) and architectureagnostic (labels do not name a specific runtime, library, file format,
+or data source), so it applies across verifier types.
+
+Design principles for verifiers
+
+Reading the taxonomy as a specification surfaces three structural
+patterns in the capabilities: (i) the verification path varies across
+criteria, (ii) judging requires inspecting artifact-internal structure
+that text serialization erases, and (iii) judging requires domain
+knowledge not in the criterion text. Each pattern follows from the
+nature of natural-language rubrics over rich agent environments
+rather than from the financial-modeling setting of BVB. We address
+each with a design principle.
+
+Methodology. Our pipeline takes a corpus of natural-language
+rubrics and produces a taxonomy of capabilities in three stages: freetext discovery, canonicalization, and closed-vocabulary tagging.
+All LLM calls use Gemini 3 Flash, and embeddings use Google’s
+text-embedding-005. The four prompts driving the pipeline are
+reproduced in Appendix A.
+
+Principle 1 (P1): Reactive verification. We cannot predict the verification path from the criterion text alone: two criteria within a
+single capability can require different files to open, different tools
+to invoke, and different orders of operation, and the number of
+distinct paths grows with the rubric. The pattern is intrinsic to
+natural-language rubrics rather than a quirk of BVB: any domain
+that admits rubrics over open-ended deliverables will exhibit it. Our
+first principle is that the verifier should be a reactive agent [73]
+that, given a criterion, autonomously decides which artifacts to
+open, which tools to invoke, and in what order, terminating once
+it reaches a verdict. This shifts dispatch from architecture-time
+enumeration to inference-time reasoning by the underlying model.
+Every capability in the taxonomy exhibits this pattern.
+
+Stage 1: Free-text discovery. For each rubric criterion, an LLM
+receives the agent-facing task brief and the criterion text, and emits
+one to three short capability labels along with a one-sentence rationale per label. Three constraints are enforced programmatically: (i)
+the rationale must begin with “the verifier needs to . . . ” and quote a
+phrase from the criterion text, which enforces verifier-side framing;
+(ii) labels must not contain tokens naming a specific runtime, library,
+file format, or data source, which enforces architecture-agnosticism;
+and (iii) labels must follow a fixed lexical form.
+Stage 2: Canonicalization. Each unique Stage 1 label is embedded
+and partitioned by agglomerative clustering into 80 fine-grained
+micro-clusters. An LLM names each micro-cluster and produces a
+definition, a diagnostic signal, a worked example, and a set of nonexamples contrasting it with its nearest siblings. A final LLM call
+merges the 80 named micro-clusters into the canonical taxonomy
+under three hard constraints: between 8 and 10 canonical capabilities, no single capability covering more than 40% of corpus criteria,
+and every input micro-cluster mapped to exactly one canonical
+capability.
+
+Principle 2 (P2): Environment alignment. Several capabilities reduce to inspecting properties of the agent’s artifacts (formula structure, layout metadata, cross-file references) that do not survive
+flattening to text or rendering as images. The pattern generalizes beyond financial modeling: any environment with binary files, stateful
+tools, or structured data has analogous properties that serialization
+erases. Our second principle is that the verifier should run in the
+same environment as the rollout agent, with access to the same
+filesystem, libraries, and tools (including domain-specific Model
+Context Protocol (MCP) [18] tools). Beyond preserving signal, this
+makes the verifier domain-agnostic by construction: deploying it in
+a new RL environment requires only granting the same tool access
+as the rollout, with no domain-specific parsers or judge tooling. Six
+capabilities in the taxonomy exhibit this pattern.
+
+Stage 3: Closed-vocabulary tagging. Every criterion is re-tagged
+against the closed canonical taxonomy. An LLM receives the criterion, its task brief, and the full taxonomy (canonical names, definitions, diagnostic signals, non-examples), and emits one to three
+canonical capability tags per criterion ranked by confidence. For
+the analyses in Section 8.2, we use the highest-confidence tag per
+criterion to obtain a clean partition; the multi-tag distribution is
+consistent with the primary-tag results.
+
+Principle 3 (P3): Domain guidance. Several capabilities require
+knowledge that does not appear in the criterion text, such as accounting sign conventions or disclosure standards for an investment memo. Every domain has analogous conventions: medical
+workflows have clinical standards, legal workflows have citation
+rules, productivity workflows have communication norms. Our
+third principle is that the verifier should accept domain guidance
+at deployment time through a dedicated guidance channel, separate
+from the criterion text and from the architecture itself. Guidance
+enters as natural-language context independent of the verifier architecture. Two capabilities in the taxonomy exhibit this pattern.
+
+Application to BVB.. Applying the methodology to the BVB rubric
+(𝑛 = 3,204 criteria) results in the nine capabilities listed in Table 1.
+The largest, audit quantitative metric calculation, accounts for 23.0%
+of rubric criteria; the smallest, validate temporal and sequential
+integrity, accounts for 3.3%.
+In the BVB setting, these abstract capabilities take concrete form.
+Audit quantitative metric calculation ranges over EV/EBITDA multiples, transaction fees; audit accounting logic and convention covers sign rules and balance-sheet identities; audit governance and
+strategic narrative covers disclaimers, regulatory boilerplate, and
+acquisition-rationale claims. The same capability labels might carry
+to other domains although with different instantiations: for example, a clinical workflow would instantiate audit accounting logic
+and convention as dosage and contraindication checks against clinical guidelines; a productivity workflow would instantiate audit
+governance and strategic narrative as escalation policies and tone
+norms.
+
+6
+
+Gandalf: a verifier for rubric-graded
+environments
+
+We implement the design principles of Section 5 in Gandalf, a
+portable Python application. Gandalf instantiates P1 by building
+on the OpenHands SDK [67], an open-source agent harness. To
+satisfy P2, Gandalf is designed to be run directly inside the same
+3
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+Table 1: The nine capabilities induced from the BVB corpus. The right-hand column reports each capability’s share of the 3,204
+corpus criteria as a primary tag (top-ranked in Stage 3).
+Capability
+
+Description
+
+Audit quantitative metric calculation
+
+Recompute a derived figure from its inputs and compare
+against the deliverable.
+
+23.0
+
+Verify literal data point accuracy
+
+Confirm a constant in the deliverable matches a constant
+in the brief or source data.
+
+15.5
+
+Reconcile cross-component data linkage
+
+Trace a value across two locations in the deliverable
+(across sheets, tabs, or files).
+
+14.9
+
+Verify structural component inventory
+
+Confirm the deliverable contains the prescribed sections,
+files, and columns.
+
+12.1
+
+Inspect visual presentation and style
+
+Evaluate fonts, colors, alignment, layout, and branding
+against the specification.
+
+11.6
+
+Audit accounting logic and convention
+
+Check signs, identities, and component completeness
+against domain conventions.
+
+7.6
+
+Validate document labeling and metadata
+
+Confirm textual labels (tab names, axis titles, headers)
+match the specification verbatim.
+
+6.5
+
+Audit governance and strategic narrative
+
+Confirm required disclosures are present and qualitative
+claims cohere with the analysis.
+
+5.4
+
+Validate temporal and sequential integrity
+
+Verify chronological alignment, period sequencing, and
+stage-boundary integrity.
+
+3.3
+
+environment as the rollout agent, including connecting to the same
+MCP tools. Gandalf supports P3 through a configuration system
+that includes accepting natural-language judge guidance; while
+guidance is domain-specific (e.g., sign conventions for financial
+models), the mechanism is domain-agnostic.
+Going beyond the design principles, Gandalf’s configuration
+system supports specifying the LLM to be used by the verifier agent,
+allowing a benchmark designer to trade off between accuracy and
+cost. As a performance optimization, Gandalf supports batching
+criteria to judge multiple criteria together at once. Rubrics in BTB
+average around 150 criteria per task, which would be prohibitively
+expensive to verify in separate reactive agent sessions that would
+have overlap (e.g., re-opening the same files). Batching amortizes
+this cost.
+
+7
+
+%
+
+justify this operating point in Section 7.3. We report cost in terms
+of evaluating over the entire dataset.
+
+7.1
+
+Evaluation
+
+We evaluate Gandalf along with three baselines described in Section 2: Archipelago (serialize-then-grade), Agent-as-a-Judge (workflowbased file inspection), and AutoRubric (text-only trajectory grading).
+The evaluation answers three questions: (1) how do verifiers compare on accuracy and cost (Section 7.1); (2) what is the impact of
+Gandalf’s design principles (Section 7.2); and (3) how sensitive is
+Gandalf to configuration choices like batch size and model family
+(Section 7.3)?
+We report F1 score as our primary measure of verifier performance, treating a criterion judged as unmet as the positive class.
+This choice reflects the label imbalance in the corpus: the majority of criterion–rollout pairs are satisfied, so F1 on the minority
+(unmet) class is more discriminating than raw accuracy. Unless otherwise noted, Gandalf runs at batch size 𝑏=16 with Gemini 3 Flash,
+with guidance and environment-aligned MCP tools enabled; we
+4
+
+Gandalf wins on accuracy and cost
+
+Figure 1 plots cost against F1 for all four verifiers across two model
+families: Gemini and GPT. The headline finding is that verifier architecture matters more than model choice: Gandalf with any backing
+model outperforms every other verifier with any backing model. In
+the GPT family, the cheapest Gandalf configuration (GPT-5.4-Nano,
+$42) achieves F1 0.633, exceeding the most expensive Archipelago
+configuration (GPT-5.4, $414, F1 0.538) by 9.5 points at one-tenth
+the cost.
+Within each verifier, scaling to a larger model yields diminishing returns. For Gandalf, F1 ranges from 0.633 (GPT-5.4-Nano) to
+0.664 (Gemini 3 Pro), a span of 3.1 points across a 7× cost increase.
+Archipelago shows a wider spread (0.473–0.604), suggesting that
+weaker architectures benefit more from stronger models, but even
+Archipelago’s best configuration (Gemini 3 Pro, $422) falls short
+of Gandalf’s cheapest. Agent-as-a-Judge (AAAJ) and AutoRubric
+cluster below F1 0.47 regardless of model, with one exception: AutoRubric with GPT-5.4 reaches 0.472, where the stronger model
+partially compensates for the lack of artifact access through better
+trajectory reasoning.
+
+7.2
+
+Design principles trade error for cost
+
+In Table 2, we isolate the contribution of P2 (environment alignment) and P3 (judge guidance) by toggling each in turn, fixing the
+base model to Gemini 3 Flash. The ablations measure the cost of
+substituting for P2 and P3 within a P1-equipped verifier rather than
+the principle’s full impact. Because Gandalf is reactive (P1), the
+agent loop can partially compensate for missing tools or missing
+
+Verifying Agents in Rubric-Graded Environments
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea
+
+Gemini 3 family
+0.7
+
+Gemini 3 Flash
+
+Gemini 3 Flash
+
+GPT 5.4 Mini
+
+Better GPT 5.4 Nano
+
+Gemini 3 Pro
+
+0.5
+Gemini 3 Pro
+
+0.4
+
+Gandalf
+Archipelago
+AAAJ
+AutoRubric
+
+Gemini 3 Flash
+Gemini 3 Flash
+
+Gemini 3 Pro
+
+GPT 5.4
+
+0.6
+
+F1
+
+F1
+
+0.7
+
+Gemini 3 Pro
+
+Better
+0.6
+
+GPT-5.4 family
+
+GPT 5.4 Mini GPT 5.4
+
+0.5
+
+GPT 5.4
+
+GPT 5.4 Nano
+
+GPT 5.4
+
+0.4
+
+GPT 5.4 Nano GPT 5.4 Mini
+GPT 5.4 Nano
+
+0.3
+
+GPT 5.4 Mini
+
+0.3
+10
+
+100
+
+1
+
+10
+
+Cost (USD, log scale)
+
+100
+
+1,000
+
+Cost (USD, log scale)
+
+Figure 1: Cost vs. F1 across verifiers on BVB, split by model family. Left: Gemini 3 (Flash, Pro). Right: GPT (Nano, Mini,
+5.4). Gandalf (𝑏=16) dominates across both families. Costs computed from public API pricing: Gemini 3 Flash $0.50/$3.00,
+Gemini 3 Pro $2.00/$12.00, GPT-5.4-Nano $0.20/$1.25, GPT-5.4-Mini $0.75/$4.50, GPT-5.4 $2.50/$15.00 per 1M input/output
+tokens.
+Table 2: Gandalf ablations on BVB. The default configuration (★) uses Gemini 3 Flash with batch size 𝑏=16, guidance, and MCP
+tools.
+Design principles
+
+Batch size
+
+Model
+
+Config
+
+F1
+
+Cost
+
+Config
+
+F1
+
+Cost
+
+Config
+
+★ Guidance + MCP
+No guidance, MCP
+
+.660
+.649
+
+$64
+$73
+
+𝑏=64
+𝑏=32
+
+.635
+.644
+
+$32
+$40
+
+Gemini 3 Pro
+.664 $299
+★ Gemini 3 Flash .660 $64
+
+No guidance, no MCP
+
+.661
+
+$102
+
+★𝑏=16 .660 $64
+𝑏=8
+.667 $100
+𝑏=4
+.673 $159
+
+GPT-5.4
+GPT-5.4-Mini
+GPT-5.4-Nano
+
+F1
+
+.637
+.658
+.633
+
+Cost
+
+$230
+$62
+$42
+
+P3: Judge guidance. Removing judge guidance (the natural-language
+domain conventions injected into the verifier’s prompt, e.g., sign
+rules in financial modeling, disclosure standards for investment
+memos) hurts on both axes: F1 drops from 0.660 to 0.649 (1.1 points)
+and cost rises from $64 to $73 (14%). Without guidance, the verifier
+takes more exploratory tool calls to infer conventions that guidance would have stated directly, and the additional exploration only
+partially recovers the lost accuracy. Within a P1-equipped verifier,
+guidance is a strict improvement on both axes: it encodes domain
+knowledge that the verifier would otherwise rediscover through
+trial and error at higher cost.
+
+guidance through additional inference-time exploration: aggregate
+F1 stays high, and the principle’s contribution surfaces in cost. The
+principle’s full impact, which non-P1 architectures cannot substitute around, manifests in the cross-verifier comparison (Section 7.1)
+and the capability-level breakdown (Section 8.2).
+
+P2: Environment alignment. The cleanest isolation of P2 would
+hold guidance fixed and remove MCP. In our setup this run is
+uninformative: the guidance we authored for BVB references MCPexposed capabilities, so without MCP it points at tools the verifier
+cannot reach. We therefore read P2’s contribution from the joint ablation. Removing both guidance and MCP (No Guidance + No MCP)
+leaves F1 unchanged (0.661 vs 0.660) but raises cost by 60% ($64 to
+$102), as the verifier compensates by writing ad-hoc Python scripts
+to parse binary files and issuing tool calls to extract information
+that a single MCP call would have returned in a more structured
+manner. Within a P1-equipped verifier, environment alignment is
+a cost optimization: the agent loop is expressive enough to work
+around missing tools, but doing so is substantially more expensive.
+
+7.3
+
+Gandalf is robust within its design space
+
+Batch size. We vary batch size, the number of criteria graded by
+one agent trajectory. F1 rises monotonically as batch size shrinks,
+from 0.635 at 𝑏=64 to 0.673 at 𝑏=4, with cost rising from $32 to $159
+across the same range. The curve flattens below 𝑏=16: dropping
+from 𝑏=16 to 𝑏=4 buys 1.3 F1 points at 2.5× the cost. At 𝑏=32 and
+below, each session is small enough for the verifier to attend to
+every criterion individually while amortizing file-reading and tool
+5
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+calls across the batch; below this point, additional sessions largely
+duplicate the same inspection work without extracting new signal.
+We fix 𝑏=16 for all cross-verifier comparisons as a deliberate costaccuracy tradeoff.
+
+section. The table includes RewardKit (RK), a concurrent agentic
+verifier covered in Section 8.3 below.
+AutoRubric. AutoRubric is a non-agentic verifier: it grades each
+criterion in an isolated LLM call over the agent’s trajectory, with no
+artifact access and no domain guidance. It satisfies none of the three
+principles. Errors are high and undifferentiated across capabilities:
+32.8–61.5% on BVB, where most evidence lives in the deliverable,
+and 9.4–31.8% on OPC, where trajectories at least carry tool-call
+content.
+
+Model choice. Table 2 also reports Gandalf at 𝑏=16 across five
+models spanning two providers. Gemini 3 Pro achieves the highest
+F1 (0.664), followed closely by Gemini 3 Flash (0.660) and GPT5.4-Mini (0.658). The full spread from the weakest model (GPT5.4-Nano, 0.633) to the strongest is 3.1 F1 points, a modest range
+given the diversity of model scale and cost. The ranking does not
+simply follow model size: GPT-5.4 (0.637) underperforms GPT-5.4Mini (0.658), suggesting that factors beyond raw capability such
+as instruction-following fidelity or tool-use calibration mediate
+verifier performance. The 3.1-point spread across model choices
+and the plateau in batch size are both smaller than the gap between
+Gandalf and any other verifier on the cost-F1 frontier (Section 7.1):
+configuration choices move Gandalf along its frontier, but they do
+not move it off.
+
+8
+
+AAAJ.. AAAJ inspects files through its own toolset rather than
+the rollout’s environment, with no domain guidance. It is a workflowbased (rather than reactive) agent, lacking all of P1–P3. Errors concentrate on the inspection-bound capabilities P2 covers: on BVB,
+verify literal data point accuracy (38.2%), audit quantitative metric calculation (35.1%), and reconcile cross-component data linkage
+(31.4%) are its three worst rows; on OPC, reconcile cross-component
+data linkage reaches 40.0%. The single BVB row AAAJ wins, audit
+governance and strategic narrative, is the only one where neither
+structural inspection nor cross-component tracing applies and the
+criteria reduce to judging textual content. On OPC the same capability flips: Gandalf wins (error rate 6.1% vs AAAJ’s 43.9% error
+rate), because OPC’s instances require tool-state inspection (e.g.,
+whether a message was sent) rather than text judgment, moving
+the bottleneck back into P2’s territory.
+
+Discussion
+
+We now step back and ask two questions about the evaluation
+results: (1) does Gandalf generalize beyond BVB (Section 8.1); and
+(2) why do different verifiers perform differently (Section 8.2)?
+
+8.1
+
+Gandalf generalizes beyond BVB
+
+Archipelago. Archipelago is workflow-based and grades each
+criterion from a serialized snapshot of the deliverable, giving it
+a partial form of P2; it has neither P1 nor P3. Table 4 reports its
+per-capability FP and FN rates on BVB (FP denotes over-rejection
+of a met criterion; FN denotes an unmet criterion passing). Errors
+split bimodally along P2’s fault line: on the four capabilities that
+require native artifact inspection, FN exceeds FP by 4.4–5.6% in
+absolute terms (e.g., inspect visual presentation and style: FP 10.5%,
+FN 16.1%) because deficient outputs pass when serialization erases
+the disqualifying signal. On the other five capabilities, FP exceeds
+FN by up to 6.5% (e.g., validate temporal and sequential integrity:
+FP 12.1%, FN 5.6%): the LLM judge over-rejects on inferences from
+rendered evidence. The pattern reproduces and sharpens on OPC:
+the Gandalf–Archipelago gap on reconcile cross-component data
+linkage widens from 6.9% on BVB to 35.0% on OPC.
+
+To investigate whether Gandalf generalizes, we collected another
+internal dataset analogous to BVB in a new domain: we additionally evaluate on an OpenClaw (OPC) benchmark of persona-driven
+personal-productivity workflows: managing schedules, coordinating with contacts, planning lifestyle tasks. OpenClaw differs from
+BVB in domain (consumer), tool surface (messaging clients, calendar and booking services, a weather API), and evidence type (many
+OpenClaw tools are stateful, so verification depends on determining if the environment has changed such as whether a message
+was sent or an event created). This dataset consists of 396 criteria
+judgments across 24 tasks.
+Figure 2 plots F1 against cost across all four verifiers on the
+OpenClaw dataset. Gandalf achieves F1 of 0.951, leading the nextbest verifier (Archipelago with Gemini 3 Flash, 0.876) by 7.5 points,
+and is again Pareto optimal: the cheaper verifiers (Archipelago,
+AutoRubric) sacrifice 7–10 F1 points. The results replicate the BVB
+finding that verifier architecture dominates model choice: Gandalf
+with Gemini 3 Flash outperforms every other verifier regardless
+of backing model. The non-agentic verifiers cluster in a narrow
+band (0.849–0.876), suggesting that once serialization captures most
+of the evidence, a stronger model or richer serialization yields
+diminishing returns.
+
+8.2
+
+Where the framework does not predict. Gandalf’s only losses are
+two BVB rows where the gap is narrow (1–2%) and the bottleneck is
+the LLM applying conventions or judging coherence over text both
+verifiers can see: audit accounting logic and convention (Archipelago
+by 2.1%) and audit governance and strategic narrative (AAAJ by
+1.1%). The principles pay off where artifact-grounded inspection is
+the bottleneck, not where the bottleneck is reasoning over rendered
+text. The OPC result on audit governance and strategic narrative
+reinforces the point in the other direction: when its criteria require
+tool-state inspection, P2 reasserts itself and Gandalf wins by 37.8%.
+
+Verifiers’ errors are explained by gaps in
+capabilities
+
+8.3
+
+Table 3 breaks down errors by capability taxonomy generated in
+Section 4. Each baseline fails specifically on capabilities where its
+missing principles would have helped, while Gandalf wins everywhere except two narrow exceptions we return to at the end of this
+
+Comparison with RewardKit
+
+RewardKit [15] is the verification component of Harbor, developed
+concurrently with Gandalf. Like Gandalf, RewardKit employs an
+agentic verifier that can interact with the agent’s output artifacts,
+6
+
+Verifying Agents in Rubric-Graded Environments
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea
+
+OpenClaw
+1
+Verifier
+
+Gemini 3 Flash
+
+Gandalf
+Archipelago
+AAAJ
+
+Better
+0.9
+
+AutoRubric
+
+GPT 5.4 Mini
+
+F1
+
+Gemini 3 Flash
+
+Model family
+Gemini 3 Flash
+GPT-5.4 Mini
+
+Gemini 3 Flash
+0.8
+Gemini 3 Flash
+
+0.7
+
+GPT 5.4 Mini
+
+1
+
+10
+
+Cost (USD, log scale)
+
+Figure 2: Cost vs. F1 across verifiers on OpenClaw (24 episodes), with Gemini 3 Flash (circles) and GPT-5.4 Mini (triangles)
+model families. Gandalf with Gemini 3 Flash sits at the Pareto frontier (F1 0.951, $8.20).
+Table 3: Per-capability error rates (%) for all five verifiers — Gandalf (Gan), Archipelago (Arc), Agent-as-a-Judge (AAAJ),
+AutoRubric (Aut), and RewardKit (RK) — on BVB and OpenClaw. Bold: best verifier on each row within each corpus (ties bolded).
+Cells marked — denote capabilities not present in the OPC corpus. RewardKit on BVB is on its 𝑛=2,634 subset (see Section 8.3).
+BVB
+Capability
+
+OPC
+
+𝑛
+
+Gan.
+
+Arc.
+
+AAAJ
+
+Aut.
+
+RK
+
+𝑛
+
+Gan.
+
+Arc.
+
+AAAJ
+
+Aut.
+
+RK
+
+Audit quantitative metric
+calculation
+Verify literal data point
+accuracy
+Reconcile cross-component
+data linkage
+Verify structural component
+inventory
+Inspect visual presentation and
+style
+Audit accounting logic and
+convention
+Validate document labeling and
+metadata
+Audit governance and strategic
+narrative
+Validate temporal and
+sequential integrity
+
+736
+
+12.0
+
+15.6
+
+35.1
+
+61.5
+
+17.0
+
+—
+
+—
+
+—
+
+—
+
+—
+
+—
+
+497
+
+12.3
+
+15.3
+
+38.2
+
+59.2
+
+12.8 200
+
+4.5
+
+10.0
+
+25.5
+
+21.5
+
+13.5
+
+478
+
+13.4
+
+20.3
+
+31.4
+
+57.1
+
+16.5
+
+20
+
+0.0
+
+35.0
+
+40.0
+
+20.0
+
+35.0
+
+388
+
+10.8
+
+12.6
+
+25.5
+
+52.1
+
+9.6
+
+53
+
+1.9
+
+13.2
+
+18.9
+
+9.4
+
+15.1
+
+373
+
+17.2
+
+26.5
+
+34.9
+
+51.5
+
+18.3
+
+—
+
+—
+
+—
+
+—
+
+—
+
+—
+
+244
+
+16.0
+
+13.9
+
+30.3
+
+60.2
+
+16.8
+
+—
+
+—
+
+—
+
+—
+
+—
+
+—
+
+207
+
+13.5
+
+15.0
+
+30.0
+
+41.5
+
+9.7
+
+41
+
+7.3
+
+24.4
+
+31.7
+
+12.2
+
+17.1
+
+174
+
+19.5
+
+21.8
+
+18.4
+
+32.8
+
+19.2
+
+66
+
+6.1
+
+25.8
+
+43.9
+
+31.8
+
+16.7
+
+107
+
+15.9
+
+17.8
+
+20.6
+
+45.8
+
+18.7
+
+12
+
+8.3
+
+25.0
+
+16.7
+
+16.7
+
+16.7
+
+Aggregate
+
+3,204
+
+13.6
+
+17.4
+
+31.7
+
+54.7
+
+15.2 396
+
+4.5
+
+16.2
+
+28.5
+
+20.2
+
+15.7
+
+making it the most architecturally similar baseline in our study.
+For each criterion, RewardKit spawns an isolated Claude Code
+session pointed at the agent’s output workspace; the judge can
+explore the filesystem, write scripts, and run shell commands to
+reach a verdict. Criteria are configured via TOML files and fall into
+two classes: programmatic (Python functions that inspect files or
+run shell commands) and judge-based (LLM or agent evaluation).
+We evaluate RewardKit in its agent-judge mode, both with and
+
+without access to environment-aligned MCP tools (+mcp); the latter
+toggle is the closest analogue to Gandalf’s P2 within RewardKit’s
+architecture. The key architectural difference is in how the verifier
+accesses the environment: RewardKit operates through a generalpurpose code CLI (the judge writes and executes ad-hoc scripts
+to inspect deliverables), whereas Gandalf runs inside the rollout
+agent’s own environment with access to the same domain-specific
+
+7
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+Table 4: Archipelago FP and FN rates (%) per capability on BVB, sorted by FN–FP gap. Capabilities that require native artifact
+inspection are FN-dominant; those that reduce to judgment over rendered evidence are FP-leaning.
+Capability
+
+𝑛
+
+FP rate
+
+FN rate
+
+FN–FP
+
+Native inspection required (FN-dominant)
+Inspect visual presentation and style
+Validate document labeling and metadata
+Reconcile cross-component data linkage
+Verify structural component inventory
+
+373
+207
+478
+388
+
+10.5
+4.8
+7.5
+4.1
+
+16.1
+10.1
+12.8
+8.5
+
++5.6
++5.3
++5.2
++4.4
+
+Judgment on rendered content (FP-leaning)
+Audit accounting logic and convention
+Verify literal data point accuracy
+Audit governance and strategic narrative
+Audit quantitative metric calculation
+Validate temporal and sequential integrity
+
+244
+497
+174
+736
+107
+
+7.4
+8.2
+12.1
+10.6
+12.1
+
+6.6
+7.0
+9.8
+5.0
+5.6
+
+−0.8
+−1.2
+−2.3
+−5.6
+−6.5
+
+Table 5: Comparison of RewardKit and Gandalf on
+BankerVerifierBench. Gandalf achieves the highest F1 while
+being the cheapest verifier, owing to Gemini 3 Flash’s lower
+per-token rates. Token counts are summed across prompt
+and response; costs are computed at public API list prices
+(Gemini 3 Flash: $0.50/$3.00 per MTok in/out; Claude Sonnet 4.6: $3.00/$15.00 per MTok in/out).
+Verifier
+
+Model
+
+RewardKit
+RewardKit +mcp
+Gandalf
+
+Claude Sonnet 4.6
+Claude Sonnet 4.6
+Gemini 3 Flash
+
+F1
+
+Tokens (M)
+
+Cost ($)
+
+0.879
+0.905
+0.951
+
+52.6
+51.7
+70.0
+
+162.67
+160.76
+35.76
+
+trails Gandalf on the remaining six by up to 3.6% on audit quantitative metric calculation and 3.1% on reconcile cross-component
+data linkage. The pattern is consistent with RewardKit’s design: a
+general-purpose code CLI suffices when the verifier needs to read
+a value out of a file, but underperforms when verification requires
+resolving references through the rollout agent’s own tool surface.
+RewardKit’s polarity is also distinct: with an FN/FP ratio of 0.29, it
+is the only verifier in our study biased toward over-rejection rather
+than toward letting deficient outputs pass.
+
+9
+
+Related work
+
+Agent environments. Agent benchmarks frequently rely on deterministic checks against final state, expected tool calls, or unit
+tests [4, 21, 28, 30, 31, 35, 40, 44, 45, 49, 65, 72]. In pursuit of
+greater scope and realism, recent benchmarks in semi-verifiable
+domains have embraced rubric-based grading. Such benchmarks
+include BankerToolBench [25], APEX-Agents [61], CoreCraft [42],
+GTA-2 [64], ClawBench [77], Claw-Eval [74], and AgencyBench [29].
+Across both lines, these works treat the verifier as a means to an
+end, not the object of study.
+
+tools (e.g., MCP servers) the agent used during task execution.
+Table 5 summarizes the headline result.
+Gandalf’s higher token count reflects the cost of environmentaligned verification: inspecting artifacts through native tools and
+tracing values across files takes more agentic steps than writing
+ad-hoc scripts in a code CLI. Despite consuming roughly 35% more
+tokens, Gandalf is approximately 4.5× cheaper than RewardKit because it runs on Gemini 3 Flash rather than Claude Sonnet 4.6. The
+combination of a 7.2-point F1 advantage over the best RewardKit
+variant and a substantially lower cost makes Gandalf the stronger
+choice for RL reward signals, where verifier accuracy impacts training quality [48].
+
+Rubrics. Rubrics are a popular approach to defining correctness
+in semi-verifiable domains [32, 57]. Rubrics may be authored by
+domain experts [1, 2, 58] or generated synthetically [5, 34, 50, 63].
+RubricBench [76] evaluates rubric generators themselves against
+human preferences. A line of work investigates rubrics in the context of training [12, 62]; some of this work investigates training with
+synthetic rubrics [17, 20, 52, 55]. Rubric-ARM [69] jointly optimizes
+a rubric generator and a judge, optimizing judgment accuracy for
+matching human preference ranking. Unlike these works, we take
+rubrics as a given and study the verifiers that consume them.
+
+Capability-level breakdown. RewardKit is evaluated on a subset
+(𝑛=2,634 of 3,204): a fraction of grading runs failed to complete
+because the criterion list became too large for the verifier to handle.
+Gandalf handles such cases by batching; RewardKit has no batching
+functionality. On its subset, RewardKit’s aggregate error is 15.2%
+on BVB (Table 3), between Gandalf and Archipelago. Per-capability,
+RewardKit matches or beats Gandalf on three capabilities reducible
+to direct filesystem inspection (verify structural component inventory 9.6% vs. 10.8%, validate document labeling and metadata 9.7%
+vs. 13.5%, verify literal data point accuracy 12.8% vs. 12.3%), and
+
+Verifier designs. Verifiers, both inside and outside the context of
+environments, cover a broad design space [11, 27, 75]. A line of work
+optimizes LLM-as-a-judge for evaluating text through prompting
+or training [22, 23, 36, 82], and a related line decomposes evaluation into per-criterion judgments via rubrics [16, 26, 51, 53, 79].
+Benchmarks commonly apply such techniques for outcome grading
+8
+
+Verifying Agents in Rubric-Graded Environments
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea
+
+Reasoner-Actor Collaboration. In Proceedings of the 14th International Conference
+on Learning Representations (ICLR). Rio de Janeiro, Brazil.
+[8] Shengyuan Ding, Xinyu Fang, Ziyu Liu, Yuhang Zang, Yuhang Cao, Xiangyu
+Zhao, Haodong Duan, Xiaoyi Dong, Jianze Liang, Bin Wang, Conghui He, Dahua
+Lin, and Jiaqi Wang. 2026. ARM-Thinker: Reinforcing Multimodal Generative
+Reward Models with Agentic Tool Use and Visual Reasoning. In Proceedings of
+the 2026 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR).
+Denver, CO.
+[9] Arduin Findeis, Floris Weers, Guoli Yin, Ke Ye, Ruoming Pang, and Tom Gunter.
+2025. Can External Validation Tools Improve Annotation Quality for LLM-as-aJudge?. In Proceedings of the 63rd Meeting of the Association for Computational
+Linguistics (ACL). Vienna, Austria, 15997–16020.
+[10] Luyu Gao, Aman Madaan, Shuyan Zhou, Uri Alon, Pengfei Liu, Yiming Yang,
+Jamie Callan, and Graham Neubig. 2023. PAL: Program-aided Language Models.
+In Proceedings of the 40th International Conference on Machine Learning (ICML).
+Honolulu, HI, 10764–10799.
+[11] Xinyan Guan, Yanjiang Liu, Xinyu Lu, Boxi Cao, Ben He, Xianpei Han, Le Sun,
+Jie Lou, Bowen Yu, Yaojie Lu, and Hongyu Lin. 2024. Search, Verify and Feedback:
+Towards Next Generation Post-training Paradigm of Foundation Models via
+Verifier Engineering. arXiv:2411.11504 [cs.AI]. https://arxiv.org/abs/2411.11504
+[12] Anisha Gunjal, Anthony Wang, Elaine Lau, Vaskar Nath, Yunzhong He, Bing Liu,
+and Sean Hendryx. 2026. Rubrics as Rewards: Reinforcement Learning Beyond
+Verifiable Domains. In Proceedings of the 14th International Conference on Learning
+Representations (ICLR). Rio de Janeiro, Brazil.
+[13] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu,
+Runxin Xu, Ruoyu Zhang, Shirong Ma, Xiao Bi, Xiaokang Zhang, Xingkai Yu,
+Yu Wu, Z. F. Wu, Zhibin Gou, Zhihong Shao, Zhuoshu Li, Ziyi Gao, Aixin Liu,
+Bing Xue, Bingxuan Wang, Bochao Wu, Bei Feng, Chengda Lu, Chenggang
+Zhao, Chengqi Deng, Chong Ruan, Damai Dai, Deli Chen, Dongjie Ji, Erhang Li,
+Fangyun Lin, Fucong Dai, Fuli Luo, Guangbo Hao, Guanting Chen, Guowei Li,
+H. Zhang, Hanwei Xu, Honghui Ding, Huazuo Gao, Hui Qu, Hui Li, Jianzhong
+Guo, Jiashi Li, Jingchang Chen, Jingyang Yuan, Jinhao Tu, Junjie Qiu, Junlong
+Li, J. L. Cai, Jiaqi Ni, Jian Liang, Jin Chen, Kai Dong, Kai Hu, Kaichao You, Kaige
+Gao, Kang Guan, Kexin Huang, Kuai Yu, Lean Wang, Lecong Zhang, Liang
+Zhao, Litong Wang, Liyue Zhang, Lei Xu, Leyi Xia, Mingchuan Zhang, Minghua
+Zhang, Minghui Tang, Mingxu Zhou, Meng Li, Miaojun Wang, Mingming Li,
+Ning Tian, Panpan Huang, Peng Zhang, Qiancheng Wang, Qinyu Chen, Qiushi
+Du, Ruiqi Ge, Ruisong Zhang, Ruizhe Pan, Runji Wang, R. J. Chen, R. L. Jin,
+Ruyi Chen, Shanghao Lu, Shangyan Zhou, Shanhuang Chen, Shengfeng Ye,
+Shiyu Wang, Shuiping Yu, Shunfeng Zhou, Shuting Pan, S. S. Li, Shuang Zhou,
+Shaoqing Wu, Tao Yun, Tian Pei, Tianyu Sun, T. Wang, Wangding Zeng, Wen
+Liu, Wenfeng Liang, Wenjun Gao, Wenqin Yu, Wentao Zhang, W. L. Xiao, Wei
+An, Xiaodong Liu, Xiaohan Wang, Xiaokang Chen, Xiaotao Nie, Xin Cheng, Xin
+Liu, Xin Xie, Xingchao Liu, Xinyu Yang, Xinyuan Li, Xuecheng Su, Xuheng Lin,
+X. Q. Li, Xiangyue Jin, Xiaojin Shen, Xiaosha Chen, Xiaowen Sun, Xiaoxiang
+Wang, Xinnan Song, Xinyi Zhou, Xianzu Wang, Xinxia Shan, Y. K. Li, Y. Q. Wang,
+Y. X. Wei, Yang Zhang, Yanhong Xu, Yao Li, Yao Zhao, Yaofeng Sun, Yaohui
+Wang, Yi Yu, Yichao Zhang, Yifan Shi, Yiliang Xiong, Ying He, Yishi Piao, Yisong
+Wang, Yixuan Tan, Yiyang Ma, Yiyuan Liu, Yongqiang Guo, Yuan Ou, Yuduan
+Wang, Yue Gong, Yuheng Zou, Yujia He, Yunfan Xiong, Yuxiang Luo, Yuxiang
+You, Yuxuan Liu, Yuyang Zhou, Y. X. Zhu, Yanping Huang, Yaohui Li, Yi Zheng,
+Yuchen Zhu, Yunxian Ma, Ying Tang, Yukun Zha, Yuting Yan, Z. Z. Ren, Zehui
+Ren, Zhangli Sha, Zhe Fu, Zhean Xu, Zhenda Xie, Zhengyan Zhang, Zhewen
+Hao, Zhicheng Ma, Zhigang Yan, Zhiyu Wu, Zihui Gu, Zijia Zhu, Zijun Liu, Zilin
+Li, Ziwei Xie, Ziyang Song, Zizheng Pan, Zhen Huang, Zhipeng Xu, Zhongyu
+Zhang, and Zhen Zhang. 2025. DeepSeek-R1 incentivizes reasoning in LLMs
+through reinforcement learning. Nature 645, 8081 (Sept. 2025), 633–638.
+[14] Jiuzhou Han, Wray Buntine, and Ehsan Shareghi. 2025. VerifiAgent: a Unified
+Verification Agent in Language Model Reasoning. In Proceedings of the 2025
+Conference on Empirical Methods in Natural Language Processing (EMNLP). Suzhou,
+China, 16410–16431.
+[15] Harbor Framework Team. 2026. Harbor: A framework for evaluating and optimizing agents and models in container environments. https://github.com/harborframework/harbor
+[16] Helia Hashemi, Jason Eisner, Corby Rosset, Benjamin Van Durme, and Chris
+Kedzie. 2024. LLM-Rubric: A Multidimensional, Calibrated Approach to Automated Evaluation of Natural Language Texts. In Proceedings of the 62nd Meeting
+of the Association for Computational Linguistics (ACL). Bangkok, Thailand, 13806–
+13834.
+[17] Yun He, Wenzhe Li, Hejia Zhang, Songlin Li, Karishma Mandyam, Sopan Khosla,
+Yuanhao Xiong, Nanshu Wang, Xiaoliang Peng, Beibin Li, Shengjie Bi, Shishir G.
+Patil, Qi Qi, Shengyu Feng, Julian Katz-Samuels, Richard Yuanzhe Pang, Sujan
+Gonugondla, Hunter Lang, Yue Yu, Yundi Qian, Maryam Fazel-Zarandi, Licheng
+Yu, Amine Benhalloum, Hany Awadalla, and Manaal Faruqui. 2025. AdvancedIF:
+Rubric-Based Benchmarking and Reinforcement Learning for Advancing LLM
+Instruction Following. arXiv:2511.10507 [cs.CL]. https://arxiv.org/abs/2511.10507
+[18] Xinyi Hou, Yanjie Zhao, Shenao Wang, and Haoyu Wang. 2025. Model Context
+Protocol (MCP): Landscape, Security Threats, and Future Research Directions.
+
+in agent environments by evaluating a serialized trajectory or serialized output files [42, 74]. In contrast, some environments propose
+workflow-based agents as verifiers [9, 14, 47, 59, 61, 81, 83], while
+others propose reactive agents [3, 6–8, 33, 39, 66, 68]. Despite the
+broad design space, no principled account describes which design
+choices matter for which verification capabilities.
+Meta-evaluation of verifiers. Motivated by the importance of
+verifiers in benchmarks, meta-evaluation benchmarks evaluate verifiers themselves, covering LLM-as-a-judge for preference rankings [24, 41, 60, 78] and LLM-as-a-judge for rubric grading [43].
+Verifiers can be domain-specific, motivating domain-specific benchmarks such as AgentRewardBench [37] for web agents and metaevaluations such as TinyV [70] and Huang et al. [19] for mathematics. BVB is the first meta-evaluation dataset that covers rubricgraded agent environments, where rubric criteria cover deliverable
+files and side-effecting tool calls.
+
+10
+
+Conclusion
+
+Our results motivate the adoption of guidable environment-aligned
+reactive agents as the Pareto-optimal design for verifying agents in
+rubric-graded domains. We hope that the public release of BVB will
+help facilitate continued research on building verifiers for agents,
+and that the open-source release of Gandalf will unlock more realistic benchmarks for agents.
+Limitations. The BVB dataset contains a single rollout per task;
+we did not evaluate the sensitivity of verifiers to the rollout distribution. Our study measures verifier F1 score against human labels; we
+did not evaluate whether verifier accuracy advantage translates to
+better-trained agents through RL. Our study is limited to BVB and
+our internal OpenClaw dataset; we expect Gandalf will generalize
+to domains beyond these two and hope to see this validated by
+future benchmarks.
+
+References
+[1] Afra Feyza Akyürek, Advait Gosai, Chen Bo Calvin Zhang, Vipul Gupta, Jaehwan Jeong, Anisha Gunjal, Tahseen Rabbani, Maria Mazzone, David Randolph,
+Mohammad Mahmoudi Meymand, Gurshaan Chattha, Paula Rodriguez, Diego
+Mares, Pavit Singh, Michael Liu, Subodh Chawla, Pete Cline, Lucy Ogaz, Ernesto
+Hernandez, Zihao Wang, Pavi Bhatter, Marcos Ayestaran, Bing Liu, and Yunzhong
+He. 2025. PRBench: Large-Scale Expert Rubrics for Evaluating High-Stakes Professional Reasoning. arXiv:2511.11562 [cs.CL]. https://arxiv.org/abs/2511.11562
+[2] Rahul K. Arora, Jason Wei, Rebecca Soskin Hicks, Preston Bowman, Joaquin Qui
+nonero Candela, Foivos Tsimpourlas, Michael Sharman, Meghan Shah, Andrea
+Vallone, Alex Beutel, Johannes Heidecke, and Karan Singhal. 2025. HealthBench: Evaluating Large Language Models Towards Improved Human Health.
+arXiv:2505.08775 [cs.CL]. https://arxiv.org/abs/2505.08775
+[3] Elad Ben Avraham, Changhao Li, Ron Dorfman, Roy Ganz, Oren Nuriel, Amir
+Dudai, Aviad Aberdam, Noah Flynn, Elman Mansimov, Adi Kalyanpur, and
+Ron Litman. 2026. DREAM: Deep Research Evaluation with Agentic Metrics.
+arXiv:2602.18940 [cs.AI]. https://arxiv.org/abs/2602.18940
+[4] Zehui Chen, Weihua Du, Wenwei Zhang, Kuikun Liu, Jiangning Liu, Miao Zheng,
+Jingming Zhuo, Songyang Zhang, Dahua Lin, Kai Chen, and Feng Zhao. 2024.
+T-Eval: Evaluating the Tool Utilization Capability of Large Language Models Step
+by Step. In Proceedings of the 62nd Meeting of the Association for Computational
+Linguistics (ACL). Bangkok, Thailand, 9510–9529.
+[5] Jonathan Cook, Tim Rocktäschel, Jakob Foerster, Dennis Aumiller, and Alex Wang.
+2024. TICKing All the Boxes: Generated Checklists Improve LLM Evaluation and
+Generation. arXiv:2410.03608 [cs.AI]. https://arxiv.org/abs/2410.03608
+[6] Chaoqun Cui, Jing Huang, Shijing Wang, Liming Zheng, Qingchao Kong, and
+Zhixiong Zeng. 2026. Agentic Reward Modeling: Verifying GUI Agent via Online
+Proactive Interaction. arXiv:2602.00575 [cs.RO]. https://arxiv.org/abs/2602.00575
+[7] Gaole Dai, Shiqi Jiang, Ting Cao, Yuqing Yang, Yuanchun Li, Rui Tan, Mo Li,
+and Lili Qiu. 2026. ProRe: A Proactive Reward System for GUI Agents via
+9
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+arXiv:2503.23278 [cs.CR]. https://arxiv.org/abs/2503.23278
+[19] Yuzhen Huang, Weihao Zeng, Xingshan Zeng, Qi Zhu, and Junxian He. 2025.
+From Accuracy to Robustness: A Study of Rule- and Model-based Verifiers in
+Mathematical Reasoning. arXiv:2505.22203v2 [cs.LG]. https://arxiv.org/abs/2505.
+22203v2
+[20] Zenan Huang, Yihong Zhuang, Guoshan Lu, Zeyu Qin, Haokai Xu, Tianyu Zhao,
+Ru Peng, Jiaqi Hu, Zhanming Shen, Xiaomeng Hu, Xijun Gu, Peiyi Tu, Jiaxin Liu,
+Wenyu Chen, Yuzhuo Fu, Zhiting Fan, Yanmei Gu, Yuanyuan Wang, Zhengkai
+Yang, Jianguo Li, and Junbo Zhao. 2025. Reinforcement Learning with Rubric
+Anchors. arXiv:2508.12790 [cs.AI]. https://arxiv.org/abs/2508.12790
+[21] Carlos E. Jimenez, John Yang, Alexander Wettig, Shunyu Yao, Kexin Pei, Ofir
+Press, and Karthik Narasimhan. 2024. SWE-bench: Can Language Models Resolve
+Real-World GitHub Issues?. In Proceedings of the 12th International Conference on
+Learning Representations (ICLR). Vienna, Austria.
+[22] Seungone Kim, Jamin Shin, Yejin Cho, Joel Jang, Shayne Longpre, Hwaran Lee,
+Sangdoo Yun, Seongjin Shin, Sungdong Kim, James Thorne, and Minjoon Seo.
+2024. Prometheus: Inducing Fine-grained Evaluation Capability in Language
+Models. In Proceedings of the 12th International Conference on Learning Representations (ICLR). Vienna, Austria.
+[23] Seungone Kim, Juyoung Suk, Shayne Longpre, Bill Yuchen Lin, Jamin Shin, Sean
+Welleck, Graham Neubig, Moontae Lee, Kyungjae Lee, and Minjoon Seo. 2024.
+Prometheus 2: An Open Source Language Model Specialized in Evaluating Other
+Language Models. In Proceedings of the 2024 Conference on Empirical Methods in
+Natural Language Processing (EMNLP). Miami, FL, 4334–4353.
+[24] Nathan Lambert, Valentina Pyatkin, Jacob Morrison, LJ Miranda, Bill Yuchen
+Lin, Khyathi Chandu, Nouha Dziri, Sachin Kumar, Tom Zick, Yejin Choi, Noah A.
+Smith, and Hannaneh Hajishirzi. 2025. RewardBench: Evaluating Reward Models
+for Language Modeling. In Proceedings of the 2025 Conference of the Nations of
+the Americas Chapter of the Association for Computational Linguistics (NAACL).
+Albuquerque, NM, 1755–1797.
+[25] Elaine Lau, Markus Dücker, Ronak Chaudhary, Hui Wen Goh, Rosemary Wei,
+Vaibhav Kumar, Saed Qunbar, Guram Gogia, Yi Liu, Scott Millslagle, Nasim Borazjanizadeh, Ulyana Tkachenko, Samuel Eshun Danquah, Collin Schweiker, Vijay
+Karumathil, Asrith Devalaraju, Varsha Sandadi, Haemi Nam, Punit Arani, Ray
+Epps, Abdullah Arif, Sahil Bhaiwala, Curtis Northcutt, Skyler Wang, Anish Athalye, Jonas Mueller, and Francisco Guzmán. 2026. BankerToolBench: Evaluating AI
+Agents in End-to-End Investment Banking Workflows. arXiv:2604.11304 [cs.AI].
+https://arxiv.org/abs/2604.11304
+[26] Yukyung Lee, Joonghoon Kim, Jaehee Kim, Hyowon Cho, Jaewook Kang, Pilsung
+Kang, and Najoung Kim. 2025. CheckEval: A reliable LLM-as-a-Judge framework
+for evaluating text generation using checklists. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing (EMNLP). Suzhou,
+China, 15771–15798.
+[27] Dawei Li, Bohan Jiang, Liangjie Huang, Alimohammad Beigi, Chengshuai Zhao,
+Zhen Tan, Amrita Bhattacharjee, Yuxuan Jiang, Canyu Chen, Tianhao Wu, Kai
+Shu, Lu Cheng, and Huan Liu. 2025. From Generation to Judgment: Opportunities
+and Challenges of LLM-as-a-judge. In Proceedings of the 2025 Conference on
+Empirical Methods in Natural Language Processing (EMNLP). Suzhou, China, 2757–
+2791.
+[28] Junlong Li, Wenshuo Zhao, Jian Zhao, Weihao Zeng, Haoze Wu, Xiaochen Wang,
+Rui Ge, Yuxuan Cao, Yuzhen Huang, Wei Liu, Junteng Liu, Zhaochen Su, Yiyang
+Guo, Fan Zhou, Lueyang Zhang, Juan Michelini, Xingyao Wang, Xiang Yue,
+Shuyan Zhou, Graham Neubig, and Junxian He. 2026. The Tool Decathlon:
+Benchmarking Language Agents for Diverse, Realistic, and Long-Horizon Task
+Execution. In Proceedings of the 14th International Conference on Learning Representations (ICLR). Rio de Janeiro, Brazil.
+[29] Keyu Li, Junhao Shi, Yang Xiao, Mohan Jiang, Jie Sun, Yunze Wu, Dayuan Fu,
+Shijie Xia, Xiaojie Cai, Tianze Xu, Weiye Si, Wenjie Li, Dequan Wang, and
+Pengfei Liu. 2026. AgencyBench: Benchmarking the Frontiers of Autonomous
+Agents in 1M-Token Real-World Contexts. arXiv:2601.11044 [cs.AI]. https:
+//arxiv.org/abs/2601.11044
+[30] Minghao Li, Yingxiu Zhao, Bowen Yu, Feifan Song, Hangyu Li, Haiyang Yu,
+Zhoujun Li, Fei Huang, and Yongbin Li. 2023. API-Bank: A Comprehensive
+Benchmark for Tool-Augmented LLMs. In Proceedings of the 2023 Conference on
+Empirical Methods in Natural Language Processing (EMNLP). Singapore, 3102–
+3116.
+[31] Xiangyi Li, Kyoung Whan Choe, Yimin Liu, Xiaokun Chen, Chujun Tao, Bingran
+You, Wenbo Chen, Zonglin Di, Jiankai Sun, Shenghan Zheng, Jiajun Bao, Yuanli
+Wang, Weixiang Yan, Yiyuan Li, and Han chung Lee. 2026. ClawsBench: Evaluating Capability and Safety of LLM Productivity Agents in Simulated Workspaces.
+arXiv:2604.05172 [cs.AI]. https://arxiv.org/abs/2604.05172
+[32] Bill Yuchen Lin, Yuntian Deng, Khyathi Chandu, Faeze Brahman, Abhilasha
+Ravichander, Valentina Pyatkin, Nouha Dziri, Ronan Le Bras, and Yejin Choi.
+2025. WildBench: Benchmarking LLMs with Challenging Tasks from Real Users
+in the Wild. In Proceedings of the 13th International Conference on Learning Representations (ICLR). Singapore.
+[33] Lanbo Lin, Jiayao Liu, Tianyuan Yang, Li Cai, Yuanwu Xu, Lei Wei, Sicong Xie,
+and Guannan Zhang. 2026. JADE: Expert-Grounded Dynamic Evaluation for
+
+Open-Ended Professional Tasks. arXiv:2602.06486 [cs.AI]. https://arxiv.org/abs/
+2602.06486
+[34] Tianci Liu, Ran Xu, Tony Yu, Ilgee Hong, Carl Yang, Tuo Zhao, and Haoyu Wang.
+2025. OpenRubrics: Towards Scalable Synthetic Rubric Generation for Reward
+Modeling and LLM Alignment. arXiv:2510.07743 [cs.CL]. https://arxiv.org/abs/
+2510.07743
+[35] Xiao Liu, Hao Yu, Hanchen Zhang, Yifan Xu, Xuanyu Lei, Hanyu Lai, Yu Gu,
+Hangliang Ding, Kaiwen Men, Kejuan Yang, Shudan Zhang, Xiang Deng, Aohan
+Zeng, Zhengxiao Du, Chenhui Zhang, Sheng Shen, Tianjun Zhang, Yu Su, Huan
+Sun, Minlie Huang, Yuxiao Dong, and Jie Tang. 2024. AgentBench: Evaluating
+LLMs as Agents. In Proceedings of the 12th International Conference on Learning
+Representations (ICLR). Vienna, Austria.
+[36] Yang Liu, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang
+Zhu. 2023. G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment.
+In Proceedings of the 2023 Conference on Empirical Methods in Natural Language
+Processing (EMNLP). Singapore, 2511–2522.
+[37] Xing Han Lù, Amirhossein Kazemnejad, Nicholas Meade, Arkil Patel, Dongchan
+Shin, Alejandra Zambrano, Karolina Stańczak, Peter Shaw, Christopher J. Pal,
+and Siva Reddy. 2025. AgentRewardBench: Evaluating Automatic Evaluations
+of Web Agent Trajectories. In Proceedings of the 2nd Conference on Language
+Modeling (COLM). Montreal, Canada.
+[38] Xufang Luo, Yuge Zhang, Zhiyuan He, Zilong Wang, Siyun Zhao, Dongsheng
+Li, Luna K. Qiu, and Yuqing Yang. 2025. Agent Lightning: Train ANY AI Agents
+with Reinforcement Learning. arXiv:2508.03680 [cs.AI]. https://arxiv.org/abs/
+2508.03680
+[39] Zeyao Ma, Jing Zhang, Xiaokang Zhang, Jiaxi Yang, Zongmeng Zhang, Jiajun Zhang, Yuheng Jing, Lei Zhang, Hao Zheng, Wenting Zhao, Junyang Lin,
+and Binyuan Hui. 2026. Scaling Agentic Verifier for Competitive Coding.
+arXiv:2602.04254 [cs.CL]. https://arxiv.org/abs/2602.04254
+[40] Shiva Krishna Reddy Malay, Shravan Nayak, Jishnu Sethumadhavan Nair, Sagar
+Davasam, Aman Tiwari, Sathwik Tejaswi Madhusudhan, Sridhar Krishna Nemala,
+Srinivas Sunkara, and Sai Rajeswar. 2026. EnterpriseOps-Gym: Environments
+and Evaluations for Stateful Agentic Planning and Tool Use in Enterprise Settings.
+arXiv:2603.13594 [cs.AI]. https://arxiv.org/abs/2603.13594
+[41] Saumya Malik, Valentina Pyatkin, Sander Land, Jacob Morrison, Noah A. Smith,
+Hannaneh Hajishirzi, and Nathan Lambert. 2026. RewardBench 2: Advancing
+Reward Model Evaluation. In Proceedings of the 14th International Conference on
+Learning Representations (ICLR). Rio de Janeiro, Brazil.
+[42] Sushant Mehta, Logan Ritchie, Suhaas Garre, Ian Niebres, Nick Heiner, and Edwin
+Chen. 2026. EnterpriseBench Corecraft: Training Generalizable Agents on HighFidelity RL Environments. arXiv:2602.16179 [cs.AI]. https://arxiv.org/abs/2602.
+16179
+[43] Tianjun Pan, Xuan Lin, Wenyan Yang, Qianyu He, Shisong Chen, Licai Qi, Wanqing Xu, Hongwei Feng, Bo Xu, and Yanghua Xiao. 2026. RubricEval: A RubricLevel Meta-Evaluation Benchmark for LLM Judges in Instruction Following.
+arXiv:2603.25133 [cs.AI]. https://arxiv.org/abs/2603.25133
+[44] Shishir G. Patil, Huanzhi Mao, Fanjia Yan, Charlie Cheng-Jie Ji, Vishnu Suresh, Ion
+Stoica, and Joseph E. Gonzalez. 2025. The Berkeley Function Calling Leaderboard
+(BFCL): From Tool Use to Agentic Evaluation of Large Language Models. In
+Proceedings of the 42nd International Conference on Machine Learning (ICML).
+Vancouver, Canada, 48371–48392.
+[45] Shishir G. Patil, Tianjun Zhang, Xin Wang, and Joseph E. Gonzalez. 2024. Gorilla:
+Large Language Model Connected with Massive APIs. In Proceedings of the
+38th Conference on Neural Information Processing Systems (NeurIPS). Vancouver,
+Canada, 126544–126565.
+[46] Tejal Patwardhan, Rachel Dias, Elizabeth Proehl, Grace Kim, Michele Wang, Olivia
+Watkins, Simón Posada Fishman, Marwan Aljubeh, Phoebe Thacker, Laurance
+Fauconnet, Natalie S. Kim, Patrick Chao, Samuel Miserendino, Gildas Chabot,
+David Li, Michael Sharman, Alexandra Barr, Amelia Glaese, and Jerry Tworek.
+2026. GDPval: Evaluating AI Model Performance on Real-World Economically
+Valuable Tasks. In Proceedings of the 14th International Conference on Learning
+Representations (ICLR). Rio de Janeiro, Brazil.
+[47] Hao Peng, Yunjia Qi, Xiaozhi Wang, Zijun Yao, Bin Xu, Lei Hou, and Juanzi Li.
+2025. Agentic Reward Modeling: Integrating Human Preferences with Verifiable
+Correctness Signals for Reliable Reward Systems. In Proceedings of the 63rd
+Meeting of the Association for Computational Linguistics (ACL). Vienna, Austria,
+15934–15949.
+[48] Andreas Plesner, Francisco Guzmán, and Anish Athalye. 2026. An Imperfect
+Verifier is Good Enough: Learning with Noisy Rewards. arXiv:2604.07666 [cs.LG].
+https://arxiv.org/abs/2604.07666
+[49] Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan, Yaxi Lu, Yankai Lin,
+Xin Cong, Xiangru Tang, Bill Qian, Sihan Zhao, Lauren Hong, Runchu Tian,
+Ruobing Xie, Jie Zhou, Mark Gerstein, Dahai Li, Zhiyuan Liu, and Maosong
+Sun. 2024. ToolLLM: Facilitating Large Language Models to Master 16000+
+Real-world APIs. In Proceedings of the 12th International Conference on Learning
+Representations (ICLR). Vienna, Austria.
+[50] Mohit Raghavendra, Anisha Gunjal, Bing Liu, and Yunzhong He. 2026. Agentic
+Rubrics as Contextual Verifiers for SWE Agents. arXiv:2601.04171 [cs.LG]. https:
+10
+
+Verifying Agents in Rubric-Graded Environments
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea
+
+[68] Ran Xu, Jingjing Chen, Jiayu Ye, Yu Wu, Jun Yan, Carl Yang, and Hongkun
+Yu. 2026. Incentivizing Agentic Reasoning in LLM Judges via Tool-Integrated
+Reinforcement Learning. In Proceedings of the 14th International Conference on
+Learning Representations (ICLR). Rio de Janeiro, Brazil.
+[69] Ran Xu, Tianci Liu, Zihan Dong, Tony Yu, Ilgee Hong, Carl Yang, Linjun Zhang,
+Tao Zhao, and Haoyu Wang. 2026. Alternating Reinforcement Learning for RubricBased Reward Modeling in Non-Verifiable LLM Post-Training. arXiv:2602.01511
+[cs.CL]. https://arxiv.org/abs/2602.01511
+[70] Zhangchen Xu, Yuetai Li, Fengqing Jiang, Bhaskar Ramasubramanian, Luyao
+Niu, Bill Yuchen Lin, and Radha Poovendran. 2025. TinyV: Reducing False
+Negatives in Verification Improves RL for LLM Reasoning. arXiv:2505.14625
+[cs.LG]. https://arxiv.org/abs/2505.14625
+[71] Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William W. Cohen, Ruslan Salakhutdinov, and Christopher D. Manning. 2018. HotpotQA: A Dataset
+for Diverse, Explainable Multi-hop Question Answering. In Proceedings of the
+2018 Conference on Empirical Methods in Natural Language Processing (EMNLP).
+Brussels, Belgium, 2369–2380.
+[72] Shunyu Yao, Noah Shinn, Pedram Razavi, and Karthik Narasimhan. 2025. 𝜏 bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains. In
+Proceedings of the 13th International Conference on Learning Representations (ICLR).
+Singapore.
+[73] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan,
+and Yuan Cao. 2023. ReAct: Synergizing Reasoning and Acting in Language
+Models. In Proceedings of the 11th International Conference on Learning Representations (ICLR). Kigali, Rwanda.
+[74] Bowen Ye, Rang Li, Qibin Yang, Yuanxin Liu, Linli Yao, Hanglong Lv, Zhihui Xie, Chenxin An, Lei Li, Lingpeng Kong, Qi Liu, Zhifang Sui, and Tong
+Yang. 2026. Claw-Eval: Toward Trustworthy Evaluation of Autonomous Agents.
+arXiv:2604.06132 [cs.AI]. https://arxiv.org/abs/2604.06132
+[75] Runyang You, Hongru Cai, Caiqi Zhang, Qiancheng Xu, Meng Liu, Tiezheng Yu,
+Yongqi Li, and Wenjie Li. 2026. A Survey on Agent-as-a-Judge. arXiv:2601.05111
+[cs.CL]. https://arxiv.org/abs/2601.05111
+[76] Qiyuan Zhang, Junyi Zhou, Yufei Wang, Fuyuan Lyu, Yidong Ming, Can Xu,
+Qingfeng Sun, Kai Zheng, Peng Kang, Xue Liu, and Chen Ma. 2026. RubricBench:
+Aligning Model-Generated Rubrics with Human Standards. arXiv:2603.01562
+[cs.AI]. https://arxiv.org/abs/2603.01562
+[77] Yuxuan Zhang, Yubo Wang, Yipeng Zhu, Penghui Du, Junwen Miao, Xuan Lu,
+Wendong Xu, Yunzhuo Hao, Songcheng Cai, Xiaochen Wang, Huaisong Zhang,
+Xian Wu, Yi Lu, Minyi Lei, Kai Zou, Huifeng Yin, Ping Nie, Liang Chen, Dongfu
+Jiang, Wenhu Chen, and Kelsey R. Allen. 2026. ClawBench: Can AI Agents
+Complete Everyday Online Tasks? arXiv:2604.08523 [cs.CL]. https://arxiv.org/
+abs/2604.08523
+[78] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu,
+Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang,
+Joseph E. Gonzalez, and Ion Stoica. 2023. Judging LLM-as-a-Judge with MT-Bench
+and Chatbot Arena. In Proceedings of the 37th Conference on Neural Information
+Processing Systems (NeurIPS). New Orleans, LA, 46595–46623.
+[79] Karen Zhou and Chenhao Tan. 2026. AutoChecklist: Composable Pipelines for
+Checklist Generation and Scoring with LLM-as-a-Judge. arXiv:2603.07019 [cs.CL].
+https://arxiv.org/abs/2603.07019
+[80] Shuyan Zhou, Frank F. Xu, Hao Zhu, Xuhui Zhou, Robert Lo, Abishek Sridhar,
+Xianyi Cheng, Tianyue Ou, Yonatan Bisk, Daniel Fried, Uri Alon, and Graham
+Neubig. 2024. WebArena: A Realistic Web Environment for Building Autonomous
+Agents. In Proceedings of the 12th International Conference on Learning Representations (ICLR). Vienna, Austria.
+[81] Fengbin Zhu, Xiang Yao Ng, Ziyang Liu, Chang Liu, Xianwei Zeng, Chao
+Wang, Tianhui Tan, Xuan Yao, Pengyang Shao, Min Xu, Zixuan Wang, Jing
+Wang, Xin Lin, Junfeng Li, Jingxian Zhu, Yang Zhang, Wenjie Wang, Fuli Feng,
+Richang Hong, Huanbo Luan, Ke-Wei Huang, and Tat-Seng Chua. 2025. FinDeepResearch: Evaluating Deep Research Agents in Rigorous Financial Analysis.
+arXiv:2510.13936 [cs.CL]. https://arxiv.org/abs/2510.13936
+[82] Lianghui Zhu, Xinggang Wang, and Xinlong Wang. 2025. JudgeLM: Fine-tuned
+Large Language Models are Scalable Judges. In Proceedings of the 13th International Conference on Learning Representations (ICLR). Singapore.
+[83] Mingchen Zhuge, Changsheng Zhao, Dylan Ashley, Wenyi Wang, Dmitrii
+Khizbullin, Yunyang Xiong, Zechun Liu, Ernie Chang, Raghuraman Krishnamoorthi, Yuandong Tian, Yangyang Shi, Vikas Chandra, and Jürgen Schmidhuber.
+2025. Agent-as-a-Judge: Evaluate Agents with Agents. In Proceedings of the
+42nd International Conference on Machine Learning (ICML). Vancouver, Canada,
+80569–80611.
+
+//arxiv.org/abs/2601.04171
+[51] Delip Rao and Chris Callison-Burch. 2026. Autorubric: Unifying Rubric-based
+LLM Evaluation. arXiv:2603.00077 [cs.CL]. https://arxiv.org/abs/2603.00077
+[52] MohammadHossein Rezaei, Robert Vacareanu, Zihao Wang, Clinton Wang, Bing
+Liu, Yunzhong He, and Afra Feyza Akyürek. 2025. Online Rubrics Elicitation
+from Pairwise Comparisons. arXiv:2510.07284 [cs.CL]. https://arxiv.org/abs/
+2510.07284
+[53] Jon Saad-Falcon, Rajan Vivek, William Berrios, Nandita Shankar Naik, Matija
+Franklin, Bertie Vidgen, Amanpreet Singh, Douwe Kiela, and Shikib Mehri. 2025.
+LMUnit: Fine-grained Evaluation with Natural Language Unit Tests. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing (EMNLP). Suzhou, China, 3303–3324.
+[54] Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta Raileanu, Maria Lomeli,
+Luke Zettlemoyer, Nicola Cancedda, and Thomas Scialom. 2023. Toolformer:
+Language Models Can Teach Themselves to Use Tools. In Proceedings of the 37th
+Conference on Neural Information Processing Systems (NeurIPS). New Orleans, LA,
+68539–68551.
+[55] Rulin Shao, Akari Asai, Shannon Zejiang Shen, Hamish Ivison, Varsha Kishore,
+Jingming Zhuo, Xinran Zhao, Molly Park, Samuel G. Finlayson, David Sontag,
+Tyler Murray, Sewon Min, Pradeep Dasigi, Luca Soldaini, Faeze Brahman, Wen
+tau Yih, Tongshuang Wu, Luke Zettlemoyer, Yoon Kim, Hannaneh Hajishirzi, and
+Pang Wei Koh. 2025. DR Tulu: Reinforcement Learning with Evolving Rubrics
+for Deep Research. arXiv:2511.19399 [cs.CL]. https://arxiv.org/abs/2511.19399
+[56] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei
+Zhang, Mingchuan Zhang, Y. K. Li, Y. Wu, and Daya Guo. 2024. DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models.
+arXiv:2402.03300 [cs.CL]. https://arxiv.org/abs/2402.03300
+[57] Ved Sirdeshmukh, Kaustubh Deshpande, Johannes Mols, Lifeng Jin, Ed-Yeremai
+Cardona, Dean Lee, Jeremy Kritz, Willow Primack, Summer Yue, and Chen
+Xing. 2025. MultiChallenge: A Realistic Multi-Turn Conversation Evaluation
+Benchmark Challenging to Frontier LLMs. In Proceedings of the 63rd Meeting of the
+Association for Computational Linguistics (ACL). Vienna, Austria, 18632–18702.
+[58] Giulio Starace, Oliver Jaffe, Dane Sherburn, James Aung, Jun Shern Chan, Leon
+Maksin, Rachel Dias, Evan Mays, Benjamin Kinsella, Wyatt Thompson, Johannes
+Heidecke, Amelia Glaese, and Tejal Patwardhan. 2025. PaperBench: Evaluating
+AI’s Ability to Replicate AI Research. In Proceedings of the 42nd International
+Conference on Machine Learning (ICML). Vancouver, Canada, 56843–56873.
+[59] Rui Sun, Zuo Bai, Wentao Zhang, Yuxiang Zhang, Li Zhao, Shan Sun, and Zhengwen Qiu. 2025. FinResearchBench: A Logic Tree based Agent-as-a-Judge Evaluation Framework for Financial Research Agents. In Proceedings of the 6th ACM
+International Conference on AI in Finance (ICAIF). Singapore, 656–664.
+[60] Sijun Tan, Siyuan Zhuang, Kyle Montgomery, William Y. Tang, Alejandro
+Cuadron, Chenguang Wang, Raluca Ada Popa, and Ion Stoica. 2025. JudgeBench:
+A Benchmark for Evaluating LLM-based Judges. In Proceedings of the 13th International Conference on Learning Representations (ICLR). Singapore.
+[61] Bertie Vidgen, Austin Mann, Abby Fennelly, John Wright Stanly, Lucas Rothman,
+Marco Burstein, Julien Benchek, David Ostrofsky, Anirudh Ravichandran, Debnil
+Sur, Neel Venugopal, Alannah Hsia, Isaac Robinson, Calix Huang, Olivia Varones,
+Daniyal Khan, Michael Haines, Austin Bridges, Jesse Boyle, Koby Twist, Zach
+Richards, Chirag Mahapatra, Brendan Foody, and Osvald Nitski. 2026. APEXAgents. arXiv:2601.14242 [cs.CL]. https://arxiv.org/abs/2601.14242
+[62] Vijay Viswanathan, Yanchao Sun, Shuang Ma, Xiang Kong, Meng Cao, Graham
+Neubig, and Tongshuang Wu. 2025. Checklists Are Better Than Reward Models
+For Aligning Language Models. In Proceedings of the 39th Conference on Neural
+Information Processing Systems (NeurIPS). Mexico City, Mexico, 114728–114754.
+[63] Manya Wadhwa, Zayne Sprague, Chaitanya Malaviya, Philippe Laban, Junyi Jessy
+Li, and Greg Durrett. 2025. EvalAgent: Discovering Implicit Evaluation Criteria
+from the Web. In Proceedings of the 2nd Conference on Language Modeling (COLM).
+Montreal, Canada.
+[64] Jize Wang, Xuanxuan Liu, Yining Li, Songyang Zhang, Yijun Wang, Zifei Shan,
+Xinyi Le, Cailian Chen, Xinping Guan, and Dacheng Tao. 2026. GTA-2: Benchmarking General Tool Agents from Atomic Tool-Use to Open-Ended Workflows.
+arXiv:2604.15715 [cs.CL]. https://arxiv.org/abs/2604.15715
+[65] Jize Wang, Zerun Ma, Yining Li, Songyang Zhang, Cailian Chen, Kai Chen, and
+Xinyi Le. 2024. GTA: A Benchmark for General Tool Agents. In Proceedings of the
+38th Conference on Neural Information Processing Systems (NeurIPS). Vancouver,
+Canada, 75749–75790.
+[66] Xinchen Wang, Ruida Hu, Pengfei Gao, Chao Peng, and Cuiyun Gao. 2025. An
+Agent-based Evaluation Framework for Complex Code Generation. In Proceedings
+of the 40th IEEE/ACM International Conference on Automated Software Engineering (ASE). Seoul, South Korea, 2427–2439.
+[67] Xingyao Wang, Boxuan Li, Yufan Song, Frank F. Xu, Xiangru Tang, Mingchen
+Zhuge, Jiayi Pan, Yueqi Song, Bowen Li, Jaskirat Singh, Hoang H. Tran, Fuqiang
+Li, Ren Ma, Mingzhang Zheng, Bill Qian, Yanjun Shao, Niklas Muennighoff, Yizhe
+Zhang, Binyuan Hui, Junyang Lin, Robert Brennan, Hao Peng, Heng Ji, and Graham Neubig. 2025. OpenHands: An Open Platform for AI Software Developers as
+Generalist Agents. In Proceedings of the 13th International Conference on Learning
+Representations (ICLR). Singapore.
+11
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+Appendix
+A
+
+Taxonomy construction prompts
+
+We provide the four prompts used by the three-stage taxonomy-construction pipeline (Section 4). All LLM calls use Gemini 3 Flash and
+embeddings use Google’s text-embedding-005. Variables in {{ ... }} are populated at runtime with task and criterion data.
+Stage 1 prompt: capability discovery. Run once per criterion to emit free-text capability labels and a verifier-side rationale.
+You are a methodologist designing a capability taxonomy for evaluating
+agentic/LLM-as-Judge verifiers (NOT for evaluating the agent). For each
+rubric criterion below, name 1-3 short skills the VERIFIER must possess
+to grade that criterion correctly, regardless of how the verifier is
+implemented (tool-using judge, code-execution judge, multi-agent judge,
+single-prompt judge, etc.).
+# Verifier-side framing (read carefully)
+A "capability" here is a property of the VERIFIER, not of the agent.
+- Right framing: "the verifier needs to <verb a verifier does> <noun
+describing what it inspects in the deliverable or task spec>". Example
+verbs: inspect, locate, recompute, cross-check, recognize, decompose,
+trace, measure, compare, audit, parse, interpret, classify.
+- Wrong framing (DO NOT produce): naming what the agent has to do to
+satisfy the criterion. Example forbidden agent-construction head-verbs:
+build, construct, produce, create, design, develop, write, draft,
+generate, populate, deliver, prepare, assemble, compile, render.
+(Note: words like `document`, `layout`, `output`, `format`, `present`
+are FINE when used as nouns or adjectives, e.g.
+`document_title_content_verification_capability` or
+`present_value_audit_capability`.)
+- Wrong framing (DO NOT produce): naming a specific tool, file format,
+or runtime. Forbidden tokens anywhere in the capability name: excel,
+xlsx, pptx, pdf, openpyxl, pandas, python, jinja, json, csv, mcp,
+sec, edgar, sql, api.
+- The verifier is judge-architecture-agnostic. The capability MUST be
+expressible for a verifier that:
+(a) reads the deliverable file and computes things itself,
+(b) reads the agent's generation script as proxy,
+(c) calls a remote tool to fetch source-of-truth data,
+(d) reasons over a rendered preview without executing code.
+If your capability only makes sense for one of these, restate it more
+abstractly.
+# Output format (HARD constraints)
+Each capability name MUST satisfy ALL of:
+- 4 to 8 words inclusive.
+- lower_snake_case (only [a-z_]; no digits, no hyphens, no spaces).
+- ENDS WITH `_capability` (counts as one of the 4-8 words).
+- Reads as "<verb-or-adjective>_<thing-the-verifier-inspects>_capability".
+- Distinct from sibling capabilities WITHIN this same rubric category.
+If two criteria in the same category map to the same capability, only
+emit it once per criterion, but make sure the contrasting one (if any)
+is genuinely different, not a paraphrase.
+Good examples (illustrative archetypes -- DO NOT just copy them; produce
+labels that fit the actual criterion):
+
+12
+
+Verifying Agents in Rubric-Graded Environments
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea
+
+- `numeric_value_recomputation_capability`
+- `formula_dependency_tracing_capability`
+- `cross_section_consistency_checking_capability`
+- `external_source_factual_lookup_capability`
+- `unit_and_scale_normalization_capability`
+- `qualitative_intent_interpretation_capability`
+- `multi_period_completeness_auditing_capability`
+- `visual_layout_inspection_capability`
+Bad examples (rejected by post-validation; do NOT produce these):
+- `excel_workbook_check_capability` -> contains forbidden token `excel`.
+- `build_dcf_model_capability` -> agent-side head-verb `build`.
+- `formula_audit` -> missing `_capability` suffix.
+- `verifier_reads_the_workbook_thoroughly_to_validate_capability` -> >8 words.
+- `recompute_capability` -> <4 words; not specific.
+- `accuracy_capability` -> generic virtue, not a verifier skill.
+# Each criterion's rationale (also required)
+For each criterion, include a `rationale` string of 1-2 sentences,
+explaining why the verifier needs the capabilities you listed. The
+rationale MUST:
+- Start literally with "the verifier needs to ".
+- Mention something concrete from the criterion text (a quoted phrase,
+a number, a section name) so we can audit grounding.
+- NOT mention the agent's process or how the agent should accomplish
+anything.
+# Task context (read-only)
+Task ID: {{ task_id }}
+Cohort: {{ cohort }}
+Rubric category: {{ rubric_category }}
+## Task brief (instructions the agent received)
+This is provided ONLY so you can understand WHAT deliverable the
+verifier will inspect. The capability you name is about INSPECTING the
+deliverable, not about the agent's process to produce it.
+<task_brief>
+{{ task_brief }}
+</task_brief>
+# Criteria to annotate ({{ n }} criterion(a) in this batch)
+{% for c in criteria %}
+### Criterion {{ loop.index0 }}
+- **Text**: {{ c.criterion }}
+- **Category**: {{ c.category }}
+- **Direction (FYI only, do not let this bias you)**: {{ c.direction }}
+{% endfor %}
+# Output
+Return a JSON array, one element per criterion, in the SAME order as
+above.
+
+13
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+[
+
+]
+
+{
+
+}
+
+"criterion_idx": 0,
+"capabilities": ["<lower_snake_case_capability_1>", "<...>"],
+"rationale": "the verifier needs to ..."
+
+Constraints again, summarised:
+1. 1-3 capabilities per criterion (never 0, never >3).
+2. Each capability: 4-8 words, lower_snake_case, MUST end with
+`_capability`.
+3. No agent-side head-verbs (build/produce/create/design/develop/...).
+4. No tool/format tokens (excel/xlsx/python/openpyxl/pandas/json/csv/
+sec/edgar/api/sql).
+5. Rationale starts with "the verifier needs to " and quotes from the
+criterion.
+6. Output ONLY the JSON array. No preamble, no commentary, no markdown
+fence.
+
+Stage 2 prompt (a): per-cluster canonicalization. Run once per micro-cluster to assign a canonical name, definition, diagnostic
+signal, example, and contrastive non-examples.
+You are a methodologist consolidating short, machine-tractable
+verifier-capability labels for an agentic/LLM-as-Judge evaluation
+taxonomy.
+# What is a "capability"?
+A capability is a property of the VERIFIER (the
+LLM-as-Judge/Agent-as-a-Judge/Any-other-judge), not of the agent. It names a
+verification skill the verifier needs in order to grade a rubric
+criterion correctly, regardless of whether the verifier uses tools,
+executes code, or just reasons over a rendered preview. Capability
+labels MUST NOT mention specific tools, file formats, or runtimes.
+# Input
+Below is a single CLUSTER of {{ n_members }} member-labels emitted by a
+Phase 1 free-text discovery pass. They have been grouped by a
+deterministic embedding + clustering step. Most members are
+paraphrases of the same underlying verifier skill; some members may be
+drift.
+Cluster id: `{{ cluster_id }}`
+Member-label frequency in the corpus (ranked):
+{% for m in member_labels %}- `{{ m.label }}` (frequency: {{ m.freq }})
+{% endfor %}
+A few representative example criteria from this cluster (verbatim from
+the rubric):
+{% for ex in example_criteria %}- *(task: {{ ex.task_id }}, category:
+{{ ex.category }})* {{ ex.criterion }}
+{% endfor %}
+# Task
+
+14
+
+Verifying Agents in Rubric-Graded Environments
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea
+
+Pick ONE canonical name for this cluster, plus a short description, a
+diagnostic signal, an example pattern, and 1-3 contrastive non-examples
+("if it's about X, prefer the `<sibling>` capability instead").
+## Naming constraints (HARD)
+The canonical `name` MUST satisfy ALL of:
+- 4 to 8 underscore-separated words (counting `_capability` as one
+word).
+- lower_snake_case, only [a-z_].
+- Ends with `_capability`.
+- Reads as "<verb-or-adjective>_<thing-the-verifier-inspects>_capability".
+- No agent-side construction verbs (build/construct/produce/create/
+design/develop/write/draft/generate/populate/deliver/prepare/
+assemble/compile/output/render).
+- No tool/format tokens (excel/xlsx/pptx/pdf/openpyxl/pandas/python/
+jinja/json/csv/mcp/sec/edgar/sql/api).
+- Distinct enough from common siblings
+(cross-section consistency, external lookup, completeness/
+scope, semantic intent, unit normalization, structural-grading) that
+it could not be paraphrased into one of them.
+## Output
+Return a single JSON object (NOT an array):
+{
+
+}
+
+"name": "<lower_snake_case_capability>",
+"description": "<1-2 sentences: what observable verification skill
+this is>",
+"diagnostic_signal": "<1 sentence: what is visible in the trace if
+the verifier exercised this capability vs. failed to>",
+"example_pattern": "<1-2 sentences: a concrete narrative of the
+verifier exercising this skill on a deliverable>",
+"non_examples": [
+"if the criterion is about <adjacent skill X>, prefer the
+`<sibling_capability>` label.",
+"..."
+]
+
+No preamble, no commentary, no markdown fence -- only the JSON object.
+
+Stage 2 prompt (b): final merge. Run once over all canonicalized clusters to produce the final taxonomy of 8–10 capabilities under
+the size and coverage constraints.
+You are finalising a small, distinct verifier-capability taxonomy
+that will help characterize what a verifier running in
+a Reinforcement Learning evironment needs to do.
+You are given a slate of {{ n_in }}
+candidate capabilities already produced by a clustering step, and you
+must merge near-duplicates and produce a final list of {{ min_caps }}{{ max_caps }} canonical capabilities.
+# Background
+A capability is a property of the VERIFIER, not of
+the agent. Each canonical capability must be expressible for verifiers
+of any architecture (tool-using, code-executing, or pure-reasoning).
+15
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+Capability names MUST NOT mention specific tools, file formats, or
+runtimes.
+# Candidate slate
+Each candidate has its current name, description, and the share of
+corpus criteria (out of {{ n_total }}) where it was the dominant tag at
+the cluster level.
+{% for c in candidates %}- name: `{{ c.name }}`
+share: {{ c.share }}% (n_criteria_dominated: {{ c.n }})
+description: {{ c.description }}
+diagnostic_signal: {{ c.diagnostic_signal }}
+{% endfor %}
+# Merge rules (HARD)
+1. **Final count.** Output between {{ min_caps }} and {{ max_caps }}
+canonical capabilities (inclusive).
+2. **No giant bucket.** No single canonical capability may dominate
+more than {{ max_share_pct }}% of the corpus. If a candidate
+currently exceeds this share, propose a SPLIT: emit two or more
+sub-capabilities whose union covers the same members but each
+respects the cap.
+3. **No singletons.** No canonical capability may dominate fewer than
+2% of the corpus. Merge such candidates into the nearest semantic
+neighbor.
+4. **Pairwise distinctness.** For every pair of canonical capabilities
+(A, B) that could plausibly be confused, A's `non_examples` or B's
+`non_examples` MUST mention the other and explain the boundary.
+5. **Coverage.** Every input candidate must map to exactly one
+canonical capability via the `member_input_names` field below. No
+silent drops.
+# Naming constraints (HARD)
+Same as in the upstream prompt:
+- 4 to 8 underscore-separated words (counting `_capability` as one
+word).
+- lower_snake_case, only [a-z_].
+- Ends with `_capability`.
+- Reads as "<verb-or-adjective>_<thing-the-verifier-inspects>_capability".
+- No agent-side head-verbs (build/produce/create/design/develop/write/
+draft/generate/populate/deliver/prepare/assemble/compile/output/
+render).
+- No tool/format tokens (excel/xlsx/pptx/pdf/openpyxl/pandas/python/
+jinja/json/csv/mcp/sec/edgar/sql/api).
+# Output
+Return a JSON array:
+[
+
+{
+
+"name": "<lower_snake_case_capability>",
+"description": "<1-2 sentences>",
+"diagnostic_signal": "<1 sentence>",
+"example_pattern": "<1-2 sentence narrative>",
+"non_examples": ["if <pattern>, prefer `<sibling_capability>`",
+
+16
+
+Verifying Agents in Rubric-Graded Environments
+
+]
+
+}
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea
+
+"..."],
+"member_input_names": ["<candidate name 1>", "<candidate name 2>",
+"..."]
+
+No preamble, no commentary, no markdown fence -- only the JSON array.
+
+Stage 3 prompt: closed-vocabulary tagging. Run once per criterion to assign one to three taxonomy capabilities, ranked by
+confidence.
+You are a methodologist tagging rubric criteria with the verifier
+capabilities required to grade them. The taxonomy below is fixed. Pick
+1-3 capabilities per criterion from the closed vocabulary -- do NOT
+invent new names.
+# Verifier-side framing (read carefully)
+A "capability" is a property of the VERIFIER, not of
+the agent. It names a verification skill the verifier must possess to
+grade the criterion correctly, regardless of the verifier's internal
+architecture (tool-using, code-executing, single-prompt, multi-agent,
+etc.).
+This is judge-architecture-agnostic on purpose: the same tag applies
+whether the verifier reads the deliverable file directly, parses the
+agent's generation script, calls a remote tool, or reasons over a
+rendered preview.
+# Capability taxonomy (closed vocabulary -- pick from these only)
+{% for cap in capabilities %}
+### `{{ cap.name }}`
+- **Description**: {{ cap.description }}
+- **Diagnostic signal**: {{ cap.diagnostic_signal }}
+- **Example pattern**: {{ cap.example_pattern }}
+{% if cap.non_examples %}- **Boundaries**:
+{% for ne in cap.non_examples %}
+- {{ ne }}
+{% endfor %}{% endif %}
+{% endfor %}
+# Task context
+Task ID: {{ task_id }}
+Cohort: {{ cohort }}
+Rubric category: {{ rubric_category }}
+## Task brief (instructions the agent received)
+This is provided ONLY so you can understand what deliverable the
+verifier will inspect. The capability you assign is about INSPECTING
+the deliverable, not about how the agent might produce it.
+<task_brief>
+{{ task_brief }}
+</task_brief>
+# Criteria to tag ({{ n }} criteria in this batch)
+{% for c in criteria %}
+17
+
+KDD ’26, August 9–13, 2026, Jeju Island, Republic of Korea Markus Dücker, Vaibhav Kumar, Yi Liu, Ronak Chaudhary, Andreas Plesner, Francisco Guzmán, and Anish Athalye
+
+### Criterion {{ loop.index0 }}
+- **Text**: {{ c.criterion }}
+- **Category**: {{ c.category }}
+{% endfor %}
+# Tagging rules
+1. Each criterion MUST be assigned 1-3 capability names, in
+MOST-RELEVANT-FIRST order.
+2. Capability names MUST exactly match a `name` from the taxonomy above
+(case-sensitive, including the `_capability` suffix). No paraphrasing.
+3. Tag based on what the criterion REQUIRES the verifier to do, not on
+whether any specific verifier implementation actually does it.
+4. Reserve very-broad / structural-grading capabilities for criteria
+where the grading process itself is the focus (e.g. a self-consistency
+check), not as a default top-up tag.
+# Output
+Return a JSON array, one element per criterion, in the SAME order as
+above. Each element MUST set `criterion_idx` to the criterion's index
+above.
+[
+
+]
+
+{
+
+}
+
+"criterion_idx": 0,
+"capabilities": ["<capability_name_1>", "<capability_name_2>",
+"..."]
+
+Output ONLY the JSON array. No preamble, no commentary, no markdown
+fence.
+
+18
+
+

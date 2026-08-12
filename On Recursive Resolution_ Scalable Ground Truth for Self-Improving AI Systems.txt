@@ -1,0 +1,914 @@
+On Recursive Resolution: Scalable Ground Truth for
+Self-Improving AI Systems
+Disha
+
+Jason Whang
+
+Manikandarajan Ramanathan
+
+Amazon
+USA
+disha@amazon.com
+
+Amazon
+USA
+jwhang@amazon.com
+
+Amazon
+USA
+mramnat@amazon.com
+
+ABSTRACT
+
+1
+
+Compound retrieval-augmented question-answering (QA) systems
+present a fundamental evaluation challenge: manual annotation
+does not scale, yet automated evaluation lacks the ground truth
+necessary for calibration. We introduce a self-improving evaluation
+architecture that addresses this circular dependency through three
+contributions. First, iterative consensus synthesis: an algorithm that
+treats LLM-human agreement as a free signal, escalating only disagreements to additional annotators and achieving multi-annotator
+reliability at 15.95× lower cost. Second, a tiered Wilson interval
+framework that transforms noisy binary judgments into confidencebounded evaluation results, correctly identifying regressions that
+raw failure rates obscure. Third, recursive resolution: an architecture
+where evaluation thresholds update based on remedy effectiveness,
+enabling systems to improve their own detection criteria over time.
+We validate on a compound retrieval-augmented QA system across
+13 quality metrics and three locale-specific test suites. The system
+completed full improvement cycles detecting a 44% content coverage gap during retrieval, validating a targeted fix through shadow
+evaluation, and generalizing the pattern to prevent similar regressions on other locale-specific test sets. These results demonstrate
+that scalable, self-improving evaluation of compound AI systems is
+achievable without sacrificing annotation quality.
+
+Automated evaluation of compound AI systems faces a bootstrapping paradox: calibrating an LLM evaluator requires ground truth
+labels, yet generating those labels at scale is precisely what automation should eliminate. This circularity is acute for retrievalaugmented QA systems, where retrieval, ranking, generation, and
+safety components interact to produce emergent conversational
+behaviors that cannot be assessed through component-level metrics. A compound RAG system exemplifies this complexity: a single
+user interaction may traverse multiple model components, with
+conversation quality depending on their collective behavior across
+several turns.
+Traditional evaluation relies on domain experts who manually
+assess conversations. This produces high-quality annotations but
+faces prohibitive scaling constraints. Our baseline required 26 human annotators working 10 days to evaluate 720 synthetic conversations (∼2.6 person-hours each). This bottleneck delays launches for
+new features, limits regression detection, and prevents continuous
+monitoring. LLM-as-judge approaches [6, 12] offer an alternative
+but either assume access to ground truth for calibration or accept uncalibrated judgments, neither satisfying production requirements.
+We break this circularity with iterative consensus synthesis: an
+algorithm that treats LLM-human agreement as a free signal. When
+an LLM evaluator and human annotator agree, their concordant
+judgment becomes ground truth; no additional annotation required.
+When they disagree, a second human annotator provides a tiebreaker
+via majority vote. This selective escalation achieves multi-annotator
+reliability at single-annotator cost (15.95× reduction). We combine
+this with a Wilson interval decision framework that transforms
+noisy per-conversation scores into confidence-bounded performance evaluations, and embed both within a five-layer architecture
+where evaluation outcomes inform remediation and remedy effectiveness refines future detection thresholds. We termed it recursive
+resolution.
+
+CCS CONCEPTS
+• General and reference → Evaluation.
+
+KEYWORDS
+LLM evaluation, compound AI systems, self-improving systems,
+annotation efficiency
+ACM Reference Format:
+Disha, Jason Whang, and Manikandarajan Ramanathan. 2026. On Recursive
+Resolution: Scalable Ground Truth for Self-Improving AI Systems. In Proceedings of August 9–13, 2026 (KDD ’26). ACM, New York, NY, USA, 8 pages.
+https://doi.org/10.1145/nnnnnnn.nnnnnnn
+
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than the
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.
+KDD ’26, Jeju, Korea,
+© 2026 Copyright held by the owner/author(s). Publication rights licensed to ACM.
+ACM ISBN 978-x-xxxx-xxxx-x/YY/MM. . . $15.00
+https://doi.org/10.1145/nnnnnnn.nnnnnnn
+
+INTRODUCTION
+
+Contributions. We make three contributions: (1) iterative consensus synthesis, an algorithm that reduces annotation cost from 7,672
+to 481 hours while generating ground truth across 13 quality metrics; (2) a tiered Wilson interval framework for statistically rigorous,
+multi-metric performance evaluations; and (3) demonstration of
+complete recursive resolution cycles across three locale-specific
+test suites, where the system identified content gaps, validated fixes
+through shadow evaluation, and generalized findings to prevent
+similar regressions.
+
+KDD ’26, Jeju, Korea,
+Disha, Jason Whang, and Manikandarajan Ramanathan
+
+2
+
+RELATED WORK
+
+LLM-as-Judge Evaluation. The use of large language models for
+automated evaluation has gained substantial attention following
+demonstrations of strong correlation with human judgments on
+specific tasks. G-Eval [6] employs chain-of-thought prompting to
+assess coherence and fluency, achieving improved alignment over
+reference-based metrics. MT-Bench [12] introduces pairwise comparison for multi-turn dialogue, while AlpacaEval [5] addresses
+length bias in instruction-following evaluation. These approaches
+typically assume access to ground truth for calibration or accept
+uncalibrated LLM judgments. Our work differs fundamentally by
+treating ground truth generation as a first-class problem, developing an iterative consensus mechanism that produces calibration
+data as a byproduct of the evaluation process itself.
+Synthetic Data Generation for Dialogue. Generating synthetic conversations for training and evaluation spans templatebased approaches [8], retrieval-augmented generation [4], and fully
+neural synthesis [10]. The challenge for evaluation differs from
+training: synthetic test cases must cover the distribution of production scenarios while remaining realistic enough that quality assessments transfer to real conversations. Our synthetic conversation
+generator addresses this through archetype-conditioned generation
+combined with actual system responses, ensuring that generated
+conversations reflect true system behavior rather than simulated
+approximations.
+Confidence Estimation and Statistical Testing. Rigorous
+evaluation requires distinguishing true quality differences from
+sampling noise. Card et al. [2] demonstrate that reported improvements in NLP often fall within confidence intervals, calling for
+more careful statistical practice. Wilson score intervals [11] provide
+robust confidence bounds for binomial proportions, performing
+well even with small samples and extreme success rates, properties
+essential for detecting rare but critical failures like safety violations.
+We extend this framework to multi-metric evaluations with explicit
+tier-based aggregation rules.
+Self-Improving Systems. The concept of systems that improve
+through their own outputs has deep roots in machine learning, from
+online learning [9] to recent work on constitutional AI [1] and selfrefinement [7]. Our architecture operationalizes self-improvement
+for evaluation systems specifically: the effectiveness of deployed
+fixes feeds back to refine detection thresholds, root cause classifiers,
+and remedy selection policies.
+
+3 METHODS
+3.1 Problem Formulation
+Consider a compound AI system S that processes user conversations. Let C = {𝑐 1, . . . , 𝑐 𝑁 } denote a corpus of multi-turn conversations, where each conversation 𝑐 = {(𝑢 1, 𝑟 1 ), . . . , (𝑢𝑇 , 𝑟𝑇 )}
+comprises user utterances 𝑢𝑡 and system responses 𝑟𝑡 . We seek
+to evaluate S across 𝑀 quality metrics {𝑚 1, . . . , 𝑚𝑀 }, where each
+metric 𝑚𝑖 : C → {0, 1} indicates whether conversation 𝑐 satisfies
+quality criterion 𝑖.
+The evaluation problem decomposes into three subproblems.
+The ground truth problem asks: given limited annotation budget 𝐵,
+how do we establish reliable ground truth labels G𝑖 (𝑐) for metric 𝑖
+on conversation 𝑐? The coverage problem asks: given a production
+
+query distribution 𝑃 (𝑞), how do we generate a test corpus C that
+adequately covers likely interaction patterns? The decision problem
+asks: given noisy estimates 𝑝ˆ𝑖 of metric failure rates, how do we
+make statistically rigorous recommendations?
+Our architecture addresses these problems through a five-layer
+system with feedback from evaluation outcomes to threshold refinement.
+
+3.2
+
+System Architecture
+
+The evaluation ecosystem comprises five layers operating in a
+closed feedback loop (Figure 1). The Evaluation Layer (Layer 1)
+ingests conversations from synthetic test suites, applying an LLMas-a-judge evaluator to assess quality across 13 metrics organized
+into three priority tiers. The Root Cause Engine (Layer 2) aggregates detected violations, clusters similar issues using semantic
+embeddings of evaluator reasoning, and classifies root causes into
+six categories: prompt engineering deficiencies, conversation flow
+failures, retrieval errors, model boundary violations, content gaps,
+or evaluation system issues. The Remedy Engine (Layer 3) proposes
+targeted interventions based on root cause classification: prompt
+optimization, knowledge base updates, retrieval tuning, evaluation
+threshold adjustment, with human approval required before deployment. The Rollout Manager (Layer 4) implements shadow deployment comparing candidate and control configurations, enforcing
+automated gates for safety, quality, and latency before a candidate
+configuration is accepted. The Continuous Learning Layer (Layer
+5) tracks remedy effectiveness, identifies recurring patterns, and
+feeds updated thresholds and detection rules back to Layer 1.
+The recursive structure distinguishes our approach from static
+evaluation pipelines. When a remedy successfully addresses an
+issue cluster, Layer 5 updates the corresponding detection threshold
+in Layer 1, effectively encoding the lesson that this failure mode
+has been resolved. Conversely, when remedies prove ineffective,
+Layer 5 may lower thresholds to increase sensitivity or flag the issue
+category for human investigation. This feedback loop enables the
+system to calibrate its own evaluation criteria based on empirical
+outcomes rather than fixed heuristics.
+
+3.3
+
+Synthetic Conversation Generation
+
+Comprehensive evaluation requires test cases that cover the distribution of interactions the system is expected to execute on. Manual
+test creation achieved 720 conversations over 10 days with 26 annotators. The rate is insufficient for continuous evaluation as systems
+evolve. Our synthetic conversation generator automates this process through archetype-conditioned conversation synthesis.
+Let Q = {𝑞 1, . . . , 𝑞𝐾 } denote the set of top queries covering
+85% of representative query traffic for a content domain, and let
+T = {𝜏1, . . . , 𝜏5 } denote the conversation archetypes. For each
+(𝑞, 𝜏) ∈ Q × T , the synthetic conversation generator produces
+a conversation through iterative simulation. The user simulator,
+implemented as a prompted LLM, generates utterances conditioned
+on conversation history and archetype:
+𝑢𝑡 +1 ∼ 𝑃LLM (𝑢 | 𝑐 1:𝑡 , 𝑞, 𝜏, 𝜙)
+
+(1)
+
+where 𝑐 1:𝑡 = {(𝑢 1, 𝑟 1 ), . . . , (𝑢𝑡 , 𝑟𝑡 )} is the conversation history and
+𝜙 encodes archetype-specific behavioral constraints. The system
+
+KDD ’26, Jeju, Korea,
+On Recursive Resolution: Scalable Ground Truth for Self-Improving AI Systems
+
+Figure 1: The closed-loop architecture enables recursive resolution: evaluation outcomes inform remediation, and remedy
+effectiveness refines future evaluation. Forward arrows indicate forward flow; backward arrow indicates feedback from Layer 5
+to Layer 1.
+
+response 𝑟𝑡 +1 is obtained by invoking the actual compound RAG
+system under test, ensuring that generated conversations reflect
+true system behavior rather than simulated approximations.
+Generation terminates under three conditions: the conversation reaches maximum length 𝑇max = 10 turns, the system routes
+to human support (indicating inability to resolve automatically),
+or the conversation reaches natural completion as determined by
+the archetype specification. This procedure yields |Q| × |T | conversations per content domain, providing systematic coverage of
+query-archetype combinations.
+Human validators reviewed generated conversations to assess
+quality. Of 1,946 generated conversations, validators flagged 7.45%
+as exhibiting generation artifacts (incoherent user responses, unrealistic behavior) and 20.86% as revealing genuine system-under-test
+issues (valuable for debugging but excluded from ground truth calibration). The remaining 71.79% formed the high-quality evaluation
+corpus of 1,397 conversations.
+
+3.4
+
+Two-Round Iterative Ground Truth
+Synthesis
+
+Establishing ground truth for evaluator calibration presents a costquality tradeoff. Single-annotator labels are inexpensive but noisy;
+multi-annotator consensus is reliable but expensive. Our two-round
+mechanism achieves multi-annotator quality at reduced cost by
+exploiting agreement structure (Figure 2).
+Let 𝐸𝑖 (𝑐) ∈ {0, 1} denote the LLM judge’s judgment for metric 𝑖 on conversation 𝑐, and let 𝑀1,𝑖 (𝑐) denote the corresponding
+judgment from human annotator 𝐻 1 . Round 1 computes agreement
+across all metrics:
+
+𝐴1 (𝑐) =
+
+𝑀
+Ö
+𝑖=1
+
+⊮[𝐸𝑖 (𝑐) = 𝑀1,𝑖 (𝑐)]
+
+(2)
+
+where 𝐴1 (𝑐) = 1 indicates complete agreement across all 𝑀 metrics.
+Conversations with complete agreement proceed directly to ground
+truth: G𝑖 (𝑐) = 𝐸𝑖 (𝑐) = 𝑀1,𝑖 (𝑐) for all 𝑖.
+Conversations with any disagreement (𝐴1 (𝑐) = 0) are escalated
+to Round 2. A second human annotator 𝐻 2 provides independent
+judgments 𝑀2,𝑖 (𝑐) for all metrics on the escalated conversation.
+Ground truth is then established through majority voting:
+(
+1 if 𝐸𝑖 (𝑐) + 𝑀1,𝑖 (𝑐) + 𝑀2,𝑖 (𝑐) ≥ 2
+G𝑖 (𝑐) =
+(3)
+0 otherwise
+This formulation guarantees that ground truth reflects agreement of at least two of three evaluators for every metric on every
+conversation. The efficiency gain arises from the observation that
+complete agreement, while relatively rare at the conversation level
+(13.2% in our experiments), allows substantial reduction in perconversation annotation effort.
+The complete procedure is formalized in Algorithm 3 (Appendix A). The expected annotation cost per conversation is 1 + (1 − 𝑝)
+human evaluations, where 𝑝 is the Round 1 complete-agreement
+rate, compared to 2 evaluations under a standard two-annotator protocol. More significantly, LLM-based evaluation is computationally
+inexpensive (<1 second per conversation), shifting the cost structure dramatically: the primary expense becomes Round 2 human
+annotation of disagreement cases only.
+
+3.5
+
+LLM-as-a-Judge Evaluation with Tiered
+Metrics
+
+The LLM judge evaluates conversations across 13 quality metrics
+organized into three priority tiers (full definitions in Appendix B):
+BLOCKER metrics (𝑤 𝐵 = 10.0) individually fail the evaluation,
+P0 metrics (𝑤 𝑃 0 = 5.0) affect query resolution, and P1 metrics
+(𝑤 𝑃 1 = 2.0) affect experience quality. Two additional metrics are
+monitored but excluded from evaluation decisions.
+
+KDD ’26, Jeju, Korea,
+Disha, Jason Whang, and Manikandarajan Ramanathan
+
+Figure 2: Iterative consensus mechanism. Conversations with full Round 1 agreement bypass Round 2 entirely, reducing
+annotation cost while maintaining consensus quality for disagreement cases.
+
+For each conversation 𝑐, the LLM judge produces judgments
+𝐸 (𝑐) = (𝐸 1 (𝑐), . . . , 𝐸𝑀 (𝑐)) ∈ {0, 1}𝑀 along with natural language
+reasoning. The prompt, optimized using DSPy [3], instructs the
+LLM to evaluate each dimension against explicit criteria before rendering binary judgments. The severity score aggregates violations
+weighted by tier:
+∑︁
+∑︁
+∑︁
+𝑆 (𝑐) = 𝑤 𝐵 ·
+𝐸𝑖 (𝑐) + 𝑤 𝑃 0 ·
+𝐸𝑖 (𝑐) + 𝑤 𝑃 1 ·
+𝐸𝑖 (𝑐) (4)
+𝑖∈B
+
+𝑖 ∈ P0
+
+𝑖 ∈ P1
+
+where B, P0 , P1 denote the BLOCKER, P0, and P1 metric sets
+respectively.
+
+3.6
+
+Let 𝜃𝑖 denote the ground truth baseline failure rate for metric
+𝑖. A metric exhibits statistically significant regression if 𝐿𝑖 > 𝜃𝑖 ;
+that is, we are 95% confident the true failure rate exceeds the established baseline. The evaluation result aggregates metric-level
+results according to tier:
+
+Decision =
+
+
+Fail
+
+
+
+
+ Fail
+
+
+Investigate
+
+
+
+ Pass
+
+
+if ∃𝑖 ∈ B : 𝐿𝑖 > 𝜃𝑖
+if |{𝑖 ∈ P0 : 𝐿𝑖 > 𝜃𝑖 }| ≥ 3
+if ∃𝑖 ∈ P0 : 𝐿𝑖 > 𝜃𝑖
+otherwise
+
+(6)
+
+Wilson Interval Decision Framework
+
+Thorough evaluation requires distinguishing true quality regressions from sampling variation. A system showing 5% failure rate
+on 100 test cases might have a true failure rate anywhere from 2%
+to 10%; declaring this a regression relative to a 4% baseline would
+be premature. We employ Wilson score intervals [11] to establish
+confidence bounds that inform statistically rigorous decisions.
+For a test corpus of 𝑛 conversations with 𝑋 observed failures on
+metric 𝑖, the point estimate 𝑝ˆ𝑖 = 𝑋 /𝑛 has associated Wilson lower
+bound:
+√︃
+𝐿𝑖 =
+
+𝑧 2 − 𝑧 𝑝ˆ𝑖 (1−𝑝ˆ𝑖 ) + 𝑧 2
+𝑝ˆ𝑖 + 2𝑛
+𝑛
+4𝑛 2
+
+(5)
+𝑧2
+
+1+ 𝑛
+−1
+where 𝑧 = Φ (1 − 𝛼/2) is the critical value for confidence level
+1 − 𝛼. We use 𝛼 = 0.05, yielding 95% confidence intervals.
+
+This framework ensures that any BLOCKER regression fails
+evaluation, accumulated P0 regressions trigger rejection, isolated
+P0 issues prompt investigation without blocking, and P1 issues
+alone permit passing. The statistical grounding prevents both false
+alarms from sampling noise and missed detections from inadequate
+power.
+
+4 EXPERIMENTS
+4.1 Experimental Setup
+The system under test is a Retrieval-Augmented Generation (RAG)
+system that serves user queries through a pipeline of retrieval, ranking, generation, and safety components. This compound architecture exemplifies modern enterprise AI systems where localization
+decisions affect multiple interacting components.
+
+KDD ’26, Jeju, Korea,
+On Recursive Resolution: Scalable Ground Truth for Self-Improving AI Systems
+
+Table 1: Alignment with consensus ground truth (%). The LLM
+judge achieves reliability comparable to human annotators,
+with strongest performance on objective safety metrics.
+Metric
+
+𝐻1
+
+LLM Judge
+
+𝐻2
+
+BLOCKER
+Courteous
+PII
+On Topic
+Offensive Language
+
+99.6
+100.0
+99.5
+99.7
+
+99.1
+99.9
+99.9
+100.0
+
+98.4
+100.0
+98.3
+98.4
+
+P0
+Knowledgeable
+Helpful
+Intent Understanding
+Relevant Response
+
+84.4
+75.2
+75.6
+86.3
+
+87.6
+78.8
+73.6
+84.4
+
+81.2
+87.5
+81.3
+84.0
+
+P1
+Easy to Understand
+Concise
+Efficient
+
+93.5
+90.1
+72.0
+
+88.7
+93.0
+73.0
+
+88.7
+88.0
+87.3
+
+We evaluated the system across three locale-specific test suites.
+The synthetic conversation generator produced 1,946 multi-turn
+conversations with equal distribution across five user archetypes,
+averaging 7.53 turns per conversation. After quality filtering, 1,397
+conversations formed the evaluation corpus. For each additional
+locale, the generator produced a locale-specific test suite of 555
+conversations.
+The LLM judge used prompts optimized through DSPy. Round 1
+annotation employed 20 human annotators over 2.5 days. Round 2
+annotation employed 8 human annotators over 3 days to resolve
+1,213 disagreement cases (86.8% of conversations required Round 2).
+Ground truth was established through majority voting as described
+in Section 3.4.
+
+4.2
+
+Ground Truth Quality
+
+Table 1 presents alignment between each evaluator and the consensus ground truth. The LLM judge achieves 99%+ alignment
+on BLOCKER metrics, where evaluation criteria are unambiguous and safety is paramount. For subjective P0 metrics, alignment
+ranges from 73.6% (Intent Understanding) to 87.6% (Knowledgeable),
+comparable to individual human annotators. Notably, 𝐻 2 achieves
+higher alignment on several P0 metrics, reflecting the value of
+seeing disagreement cases that highlight evaluation ambiguity.
+The alignment patterns reveal an important property: disagreement concentrates on inherently subjective dimensions. Metrics
+like Efficient (“Did the conversation require excessive turns?”) admit legitimate disagreement even among careful human annotators.
+The LLM judge’s alignment on these metrics (73.0%) falls within the
+range of human inter-annotator agreement, suggesting that lower
+alignment reflects genuine ambiguity rather than evaluator failure.
+
+Table 2: Baseline pass rates (%) on synthetic data, establishing
+thresholds for regression detection.
+Metric
+
+Pass %
+
+Metric
+
+Pass %
+
+Courteous
+PII
+On Topic
+Offensive Language
+Knowledgeable
+Easy to Understand
+
+99.9
+100.0
+99.9
+100.0
+79.3
+95.1
+
+Helpful
+Efficient
+Intent Understanding
+Relevant Response
+Concise
+
+54.5
+53.6
+58.2
+87.3
+94.8
+
+(99.9%–100% pass rate), validating system safety. P0 metrics reveal
+improvement opportunities: Helpful (54.5%) and Intent Understanding (58.2%) indicate that roughly half of conversations fail to fully
+address user needs.
+The two-round mechanism achieved substantial efficiency gains.
+Under the baseline approach (two annotators per conversation
+with consensus resolution), evaluating 1,946 conversations would
+require approximately 7,672 hours based on extrapolation from our
+prior experience (3,600 turns requiring 1,885 annotator-hours). Our
+approach required 481 hours: 325 hours for Round 1 plus 156 hours
+for Round 2. This represents a 15.95× reduction in annotation effort
+while increasing test coverage from 3,600 to 14,653 evaluated turns,
+a 307% improvement. This efficiency gain translates to significant
+cost savings per evaluation cycle and enables continuous evaluation
+frequency.
+
+4.4
+
+Recursive Resolution: Complete Cycle
+Evidence
+
+The system was applied to evaluate the RAG system across three
+locale-specific datasets. We present two case studies demonstrating
+complete recursive resolution cycles where all five layers operated
+in sequence.
+Case Study 1: Content Format Divergence. During the evaluation
+process for the second locale-specific dataset, the LLM judge flagged
+synthetic conversations with significantly elevated Unknowledgeable failures. Layer 2 root cause analysis clustered 89% of these
+failures, with semantic analysis of the LLM judge’s reasoning revealing that responses lacked locale-specific information for a given
+content domain.
+Quantitative investigation by Layer 3 identified the root cause:
+domain-specific help content in this locale was stored in a separate
+“domain-specific help collection” rather than the standard database
+collection queried by the system. This locale’s knowledge base
+contained only 297 documents compared to 431 in the baseline
+locale (a 31% gap). However, 130 additional documents relating
+to the domain existed in the alternate format, bringing potential
+coverage to 427 documents (99% of baseline coverage).
+Layer 3 proposed a targeted remedy: modify the system’s retrieval call to query both collection formats:
+
+Baseline Performance and Efficiency
+
+collections = {HelpDB𝑙𝑜𝑐𝑎𝑙𝑒 , DomainHelp𝑔𝑙𝑜𝑏𝑎𝑙 }
+
+Table 2 presents the system’s performance on the ground truth
+corpus, establishing baseline failure rates 𝜃𝑖 for the Wilson interval framework. BLOCKER metrics show near-perfect performance
+
+Layer 4 validated the fix through shadow evaluation on 200
+domain-specific synthetic conversations, showing Knowledgeable
+improvement from 58.3% to 79.1% (+20.8 percentage points) with
+
+4.3
+
+(7)
+
+KDD ’26, Jeju, Korea,
+Disha, Jason Whang, and Manikandarajan Ramanathan
+
+acceptable latency increase (p95: 1.2s → 1.4s). Evaluation on the
+full locale test set showed a 42% reduction in failed Q&A conversations for this domain.
+Critically, Layer 5 generalized this finding: the meta-learner
+recorded the pattern “locale expansion may introduce content format divergence for domains with global vs. regional help architectures” and added proactive content format audits to the evaluation
+checklist. This heuristic was applied during the subsequent locale
+expansion, where similar format divergence was identified and addressed before evaluation rather than after, preventing a regression
+that would have otherwise required a second remediation cycle.
+Case Study 2: Systematic Knowledge Gaps. The third locale’s evaluation on 555 synthetic conversations demonstrated the Wilson
+interval framework’s ability to distinguish actionable regressions
+from noise. Table 3 (Appendix C) presents the complete analysis.
+The system issued a Pass-with-Investigation decision based
+on two failing P0 metrics. Layer 2 analysis revealed that Unknowledgeable failures were 2× the baseline rate (55.1% vs. 27.2%), with
+variation by content domain ranging between 33% and 86%. Semantic clustering of the LLM judge’s reasoning identified six systematic
+failure themes: (1) inability to access user account details, (2) inability to provide specific information (prices, dates), (3) lack of
+knowledge about regional restrictions and edge cases, (4) inability
+to answer temporal questions (“how long,” “when exactly”), (5) no
+visibility into temporary changes or account status, and (6) context
+loss across conversation turns.
+Layer 3 classified these into two categories: content gaps (themes
+1–4, addressable through knowledge base expansion) and capability limitations (themes 5–6, requiring engineering roadmap items).
+This triage, which distinguishes actionable content issues from
+longer-term capability gaps, exemplifies how the recursive resolution architecture converts evaluation signals into differentiated
+remediation strategies.
+
+5
+
+DISCUSSION AND FUTURE WORK
+
+Limitations. Ground truth quality depends on annotator expertise; domain-specific training remains essential. The Wilson framework assumes metric independence, which may not hold; the thirdlocale analysis found 50% overlap between Unhelpful and Unknowledgeable failures. Layer 3 remedies require human approval; fully
+autonomous remediation remains future work. Our evaluation focused on English; multilingual extension requires validation.
+Future Directions. Current evaluation identifies that issues exist
+without pinpointing which component is responsible. Componentlevel evaluation will assess individual components (e.g., retriever,
+ranker, generator) for precise root cause attribution. Other modalities like voice will also adapt the framework, addressing ASR error
+propagation and prosodic information loss.
+
+6
+
+CONCLUSION
+
+We presented iterative consensus synthesis, an algorithm that breaks
+the ground truth bootstrapping problem by treating LLM-human
+agreement as a free signal. This selective escalation reduces annotation effort by 15.95× while achieving multi-annotator reliability.
+
+Combined with Wilson interval decisions and a recursive resolution architecture, the approach enables self-improving evaluation
+at scale. These results show that scalable, statistically rigorous evaluation of compound AI systems is achievable, enabling continuous
+quality monitoring that would otherwise be prohibitively expensive.
+
+REFERENCES
+[1] Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion,
+Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon,
+et al. 2022. Constitutional AI: Harmlessness from AI Feedback. arXiv preprint
+arXiv:2212.08073 (2022).
+[2] Dallas Card, Peter Henderson, Urvashi Khandelwal, Robin Jia, Kyle Mahowald,
+and Dan Jurafsky. 2020. With Little Power Comes Great Responsibility. arXiv
+preprint arXiv:2010.06595 (2020).
+[3] Omar Khattab, Keshav Santhanam, Xiang Lisa Li, David Hall, Percy Liang, Christopher Potts, and Matei Zaharia. 2023. DSPy: Compiling Declarative Language
+Model Calls into Self-Improving Pipelines. arXiv preprint arXiv:2310.03714 (2023).
+[4] Hyunwoo Kim, Jack Hessel, Liwei Jiang, Ximing Lu, Youngjae Yu, Pei Zhou,
+Ronan Le Bras, Malihe Alikhani, Gunhee Kim, Maarten Sap, and Yejin Choi.
+2023. SODA: Million-scale Dialogue Distillation with Social Commonsense
+Contextualization. arXiv preprint arXiv:2212.10465 (2023).
+[5] Xuechen Li, Tianyi Zhang, Yann Dubois, Rohan Taori, Ishaan Gulrajani, Carlos Guestrin, Percy Liang, and Tatsunori B Hashimoto. 2023. AlpacaEval:
+An Automatic Evaluator for Instruction-following Language Models. https:
+//github.com/tatsu-lab/alpaca_eval.
+[6] Yang Liu, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang
+Zhu. 2023. G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment.
+arXiv preprint arXiv:2303.16634 (2023).
+[7] Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah
+Wiegreffe, Uri Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, et al.
+2023. Self-Refine: Iterative Refinement with Self-Feedback. Advances in Neural
+Information Processing Systems 36 (2023).
+[8] Pararth Shah, Dilek Hakkani-Tür, Gokhan Tür, Abhinav Rastogi, Ankur Bapna,
+Neha Nayak, and Larry Heck. 2018. Bootstrapping a Neural Conversational Agent
+with Dialogue Self-Play, Crowdsourcing and On-Line Reinforcement Learning. In
+Proceedings of the 2018 Conference of the North American Chapter of the Association
+for Computational Linguistics: Human Language Technologies. 41–51.
+[9] Shai Shalev-Shwartz. 2012. Online Learning and Online Convex Optimization.
+Foundations and Trends in Machine Learning 4 (2012), 107–194.
+[10] Yizhong Wang, Yeganeh Kordi, Swaroop Mishra, Alisa Liu, Noah A Smith, Daniel
+Khashabi, and Hannaneh Hajishirzi. 2023. Self-Instruct: Aligning Language
+Models with Self-Generated Instructions. In Proceedings of the 61st Annual Meeting
+of the Association for Computational Linguistics. 13484–13508.
+[11] Edwin B Wilson. 1927. Probable Inference, the Law of Succession, and Statistical
+Inference. J. Amer. Statist. Assoc. 22, 158 (1927), 209–212.
+[12] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu,
+Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al. 2023. Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena. In Advances in Neural
+Information Processing Systems, Vol. 36. 46595–46623.
+
+KDD ’26, Jeju, Korea,
+On Recursive Resolution: Scalable Ground Truth for Self-Improving AI Systems
+
+A
+
+ALGORITHM: TWO-ROUND GROUND
+TRUTH SYNTHESIS
+Algorithm 1: Two-Round Ground Truth Synthesis
+Input: Corpus C, LLM judge evaluator 𝐸, annotator pools 𝐴1 , 𝐴2
+Output: Ground truth labels G
+1: Initialize G ← ∅, D ← ∅, E ← ∅, M1 ← ∅
+2: for each 𝑐 ∈ C do
+3: E[𝑐 ] ← 𝐸 (𝑐 )
+⊲ LLM judge on all 𝑀 metrics
+4: M1 [𝑐 ] ← 𝐴1 (𝑐 )
+⊲ Human annotator Round 1
+5: if E[𝑐 ] = M1 [𝑐 ] then
+6:
+G [𝑐 ] ← E[𝑐 ]
+⊲ Full agreement
+7: else
+8:
+D ← D ∪ {𝑐 }
+⊲ Escalate to Round 2
+9: for each 𝑐 ∈ D do
+10: m2 ← 𝐴2 (𝑐 )
+⊲ Human annotator Round 2
+11: for 𝑖 = 1, . . . , 𝑀 do
+12:
+G𝑖 [𝑐 ] ← majority(E𝑖 [𝑐 ], M1,𝑖 [𝑐 ], m2,𝑖 )
+13: return G
+
+Inefficient: The conversation requires excessive turns to resolve.
+Spelling_errors: The bot’s response contains spelling or grammar
+errors.
+Monitored Metrics are tracked but excluded from evaluation.
+Unempathetic: The bot fails to acknowledge user emotions or
+frustration.
+Prompt_injection: The user attempts to manipulate bot behavior
+through adversarial prompting.
+
+C
+
+THIRD LOCALE EVALUATION DETAILED
+ANALYSIS
+C.1 Wilson Interval Results
+Table 3 presents the complete Wilson interval analysis for the third
+locale dataset evaluation on 555 conversations.
+Table 3: Third locale Wilson interval analysis (𝑛 = 555,
+𝛼 = 0.05). Two P0 metrics failed, triggering Pass-withInvestigation decision.
+Metric
+
+Tier
+
+% Fail
+
+𝐿𝑖
+
+𝜃𝑖
+
+Status
+
+Figure 3: Two-round iterative consensus procedure. Round 1
+identifies LLM judge–annotator agreement. Only disagreements proceed to Round 2 for majority voting.
+
+PII
+Off Topic
+Offensive
+Discourteous
+
+BLOCKER
+BLOCKER
+BLOCKER
+BLOCKER
+
+0.0
+0.0
+0.0
+0.9
+
+0.00
+0.00
+0.00
+0.3
+
+0.00
+0.00
+0.00
+0.8
+
+Pass
+Pass
+Pass
+Pass
+
+B
+
+Unknowledgeable
+Unhelpful
+Intent Understand.
+Non-relevant
+
+P0
+P0
+P0
+P0
+
+55.1
+72.1
+61.8
+15.0
+
+50.9
+68.1
+57.6
+12.1
+
+27.2
+62.6
+59.8
+23.3
+
+Fail
+Fail
+Pass
+Pass
+
+Inefficient
+Verbose
+
+P1
+P1
+
+78.0
+15.3
+
+74.3
+12.5
+
+69.2
+9.0
+
+Fail
+Fail
+
+COMPLETE METRIC DEFINITIONS
+
+This appendix provides complete definitions for all 13 LLM judge
+metrics, organized by priority tier.
+BLOCKER Metrics (weight 𝑤 𝐵 = 10.0) represent violations
+that individually fail evaluation.
+Off_topic: The bot discusses matters outside the system’s scope.
+A conversation passes if all bot responses remain within system
+topical boundaries.
+Offensive_language: The bot uses inappropriate, offensive, or
+harmful language including profanity, slurs, or demeaning characterizations.
+Discourteous: The bot is rude, dismissive, or disrespectful to the
+user, including interrupting or ignoring stated concerns.
+PII_exposure: The bot inappropriately reveals, requests, or handles personally identifiable information.
+P0 Metrics (weight 𝑤 𝑃 0 = 5.0) affect whether the user’s query
+is successfully resolved.
+Unknowledgeable: The bot provides incorrect or outdated information.
+Unhelpful: The bot fails to address the user’s actual need, even if
+responses are polite and factually accurate.
+Intent_understanding: The bot misinterprets what the user is
+asking.
+Non_relevant_response: The bot’s response does not relate to the
+current conversation context.
+P1 Metrics (weight 𝑤 𝑃 1 = 2.0) affect experience quality without
+determining resolution.
+Hard_to_understand: The bot’s response is confusing or poorly
+structured.
+Verbose: The bot’s response is unnecessarily long.
+
+C.2
+
+Failure Theme Analysis
+
+Semantic clustering of the LLM judge’s reasoning identified six
+systematic failure themes:
+(1) Account Access: Inability to access user account details
+(2) Specific Information: Inability to provide specific information (prices, dates)
+(3) Regional Knowledge: Lack of knowledge about regional
+restrictions and edge cases
+(4) Temporal Questions: Inability to answer temporal questions (“how long,” “when exactly”)
+(5) Dynamic Content: No visibility into temporary changes
+or account status
+(6) Context Retention: Context loss across conversation turns
+(intent failures)
+Layer 3 classified themes 1–4 as content gaps (addressable through
+knowledge base expansion) and themes 5–6 as capability limitations
+(requiring engineering roadmap items).
+
+D
+
+WILSON INTERVAL DERIVATION
+
+The Wilson score interval provides a confidence interval for a
+binomial proportion that performs well across all sample sizes and
+success rates, unlike the normal approximation which fails near
+boundaries and with small samples.
+
+KDD ’26, Jeju, Korea,
+Disha, Jason Whang, and Manikandarajan Ramanathan
+
+Starting from the score test, we seek values of 𝑝 for which the
+observed proportion 𝑝ˆ = 𝑋 /𝑛 is not significantly different from 𝑝.
+The score statistic is:
+𝑝ˆ − 𝑝
+𝑧 = √︁
+(8)
+𝑝 (1 − 𝑝)/𝑛
+Setting |𝑧| ≤ 𝑧𝛼/2 and solving for 𝑝 yields the Wilson interval.
+Squaring both sides:
+𝑧2 =
+
+(𝑝ˆ − 𝑝) 2
+𝑝 (1 − 𝑝)/𝑛
+
+(9)
+
+Rearranging:
+𝑧 2 𝑝 (1 − 𝑝) = 𝑛(𝑝ˆ − 𝑝) 2
+Expanding and collecting terms in 𝑝:
+(𝑛 + 𝑧 2 )𝑝 2 − (2𝑛𝑝ˆ + 𝑧 2 )𝑝 + 𝑛𝑝ˆ 2 = 0
+
+(10)
+
+(11)
+
+Applying the quadratic formula yields the Wilson interval bounds:
+√︁
+(2𝑛𝑝ˆ + 𝑧 2 ) ± 𝑧 4 + 4𝑛 ˆ
+𝑝𝑧 2 (1 − ˆ
+𝑝)
+𝑝=
+(12)
+2
+2(𝑛 + 𝑧 )
+Which simplifies to the form presented in the main text. For our
+application with 𝛼 = 0.05, we use 𝑧 = 1.96.
+
+

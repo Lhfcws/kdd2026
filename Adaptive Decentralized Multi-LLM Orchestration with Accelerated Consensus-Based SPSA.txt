@@ -1,0 +1,1315 @@
+Adaptive Decentralized Multi-LLM Orchestration with
+Accelerated Consensus-Based SPSA
+Kirill Chernikov
+
+Elizaveta Tarasova✉
+
+Oleg Granichin
+
+chernikov.kv@gmail.com
+ITMO University
+Saint Petersburg, Russia
+
+elizaveta.tarasova@spbu.ru,
+el.u.tarasova@gmail.com
+Saint Petersburg State University
+Saint Petersburg, Russia
+
+o.granichin@spbu.ru
+Saint Petersburg State University
+Saint Petersburg, Russia
+
+Abstract
+Adaptive routing in multi-LLM systems is difficult to evaluate reliably because different policies may observe different model outputs,
+latencies, costs, and judge scores. We introduce a replay-based evaluation protocol that fixes both the task stream and the potential
+outcome of each task–agent pair, allowing routing policies to be
+compared under identical conditions. Within this framework, we
+adapt an existing distributed accelerated consensus-based simultaneous perturbation stochastic approximation method (A-SPSA),
+rather than proposing a new optimization algorithm, to the online
+optimization of controller parameters used for processing-time and
+wait-time prediction. The method combines two-point zeroth-order
+feedback, accelerated surrogate updates, and consensus among distributed controllers. We evaluate A-SPSA against several distributed
+zeroth-order baselines in a discrete-event simulation with heterogeneous agents, and further validate the policies using cached outputs
+from real LLM endpoints. The experiments include aggregate comparison, component-level ablation, and hyperparameter sensitivity
+analysis. A-SPSA achieves the strongest overall balance between
+routing objective, deadline hit rate, and wait-time prediction error,
+while the ablation results show that lower intermediate prediction
+loss does not necessarily lead to better downstream routing decisions. The proposed protocol provides a reproducible basis for
+evaluating adaptive agent-routing policies under stochastic and
+partially observable conditions.
+
+1
+
+Introduction
+
+LLM-based agents are increasingly deployed not as isolated models,
+but as components of larger agentic AI systems. Such systems may
+include multiple specialized LLM agents, routing or orchestration
+layers, external tools, quality evaluators, and online feedback loops.
+Their evaluation is therefore substantially more difficult than the
+evaluation of a single model on a static benchmark. The observed
+behavior depends not only on the quality of individual model outputs, but also on which agent is selected, how latency and cost
+are handled, how feedback is delayed, and how the system adapts
+over time. Recent work on LLM-based agent evaluation and agent
+benchmarks highlights the need to evaluate agents in interactive
+and dynamic settings rather than only through single-turn output
+quality [15, 26, 28].
+A central difficulty is reproducibility. In adaptive multi-LLM orchestration, different routing policies may send the same task to
+different models and therefore observe different stochastic outputs,
+latencies, and quality signals. As a result, a naive comparison of
+Eval. & Trustworthiness of Agentic AI @ KDD’26, Jeju, Republic of Korea
+2026.
+
+policies can conflate the quality of the routing decision with random variation in model generation or API behavior. LLM-as-judge
+methods provide a scalable way to approximate quality signals,
+but they also introduce their own sources of bias and uncertainty,
+including judge-model preferences and sensitivity to prompting
+protocols [16, 27]. For this reason, evaluating an adaptive routing
+policy requires not only task-level performance scores, but also a
+protocol that controls which potential outcomes are available to
+each policy. Existing LLM routing methods address important cost–
+quality trade-offs in model selection. For example, cascaded and
+routing-based approaches can reduce inference cost while maintaining or improving response quality, and recent work studies
+routing from preference data and resource allocation in multi-agent
+LLM systems [2, 6, 20]. However, these works primarily focus on
+learning or designing routing mechanisms. The complementary
+question of how to reproducibly evaluate adaptive online routing
+policies under the same stochastic task–agent outcomes, delayed
+feedback, and judge-based quality signals remains less developed.
+In this paper, we address this question using the decentralized
+adaptive multi-agent routing architecture introduced in [25] as a
+controlled system substrate. Unlike that study, the present work
+focuses on the reproducible evaluation of adaptive multi-LLM routing policies under stochastic outputs, partial observability, delayed
+feedback, and heterogeneous latency–quality trade-offs.
+The adaptation mechanisms considered in this study come from
+distributed zeroth-order optimization. Such methods are natural
+candidates for online LLM orchestration because routing objectives
+are black-box, noisy, and observed only through feedback. We include simultaneous perturbation stochastic approximation and its
+consensus-based and accelerated variants [8, 9, 11, 12, 23, 24], as
+well as representative distributed zeroth-order and primal–dual
+baselines [1, 7, 14, 17, 22]. These methods are not introduced as
+new optimization algorithms in this paper; rather, they serve as
+adaptive routing policies whose behavior can be compared within
+a common evaluation protocol.
+We propose a replay-based evaluation protocol for adaptive
+multi-LLM orchestration. The protocol fixes the task stream, precollects or simulates potential task–agent executions, and then
+replays the same potential outcomes for all routing policies. This design separates policy behavior from stochastic generation noise and
+makes it possible to compare policies under identical task streams,
+agent outputs, latency observations, and judge signals. The evaluation reports both operational routing metrics, such as routing
+utility and deadline hit rate, and intermediate adaptation metrics,
+such as prediction losses and stability across seeds.
+Our contributions are as follows:
+
+K. Chernikov, E. Tarasova, and O. Granichin
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+• We formulate adaptive multi-LLM routing as an evaluation
+problem for agentic AI systems with stochastic outputs, delayed feedback, and heterogeneous latency–quality tradeoffs.
+• We introduce a replay-based evaluation protocol that fixes
+the task stream and caches task–agent executions, enabling
+adaptive routing policies to be compared under identical
+potential outcomes.
+• We instantiate the protocol in a decentralized multi-controller
+routing system and compare several adaptive zeroth-order
+policies, including baseline distributed SPSA and distributed
+accelerated consensus-based A-SPSA.
+• We analyze component-level behavior, step-size sensitivity,
+and a small real-endpoint feasibility setting, and discuss evaluation limitations such as judge bias, induced heterogeneity,
+and the limited scale of real-endpoint validation.
+
+2 Evaluation Problem and System Setting
+2.1 Evaluation Problem
+We consider adaptive task routing in a multi-LLM orchestration
+system. Tasks arrive online and must be assigned to LLM agents
+using only the available history and the current system state. Let
+𝑇 = 𝑇1,𝑇2, . . . be the task stream, where task 𝑇𝑖 arrives at time
+𝑡𝑖arr . When processing 𝑇𝑖 , the system observes only H𝑖 = 𝑇1, . . . ,𝑇𝑖
+and feedback from previously completed tasks; future arrivals, API
+delays, LLM outputs, and quality values are unknown.
+The main evaluation challenge is that different routing policies
+may assign the same task to different agents and therefore observe
+different responses, latencies, costs, and quality signals. A direct
+online comparison can thus mix policy quality with stochastic
+generation, API variability, and judge noise. We therefore treat
+a routing policy as 𝜋 : H𝑖 × S𝑖 → E, where S𝑖 is the current
+system state and E is the set of LLM agents, and compare policies
+under a controlled task stream and controlled potential task–agent
+outcomes.
+
+2.2
+
+Adaptive Multi-LLM Routing Setting
+
+The execution layer consists of LLM agents E = 𝐸 1, . . . , 𝐸𝑛 . Each
+agent represents an LLM model or service and may differ in response quality, latency, cost, specialization across task types, and
+availability. Following the distributed adaptive task-allocation setting of [25], we introduce controllers C = 𝐶 1, . . . , 𝐶𝑚 , which receive
+tasks, estimate their parameters, select LLM agents, and update local prediction models from feedback. Controllers communicate
+over G(𝜏) = (C, A (𝜏)), where A (𝜏) is the set of controller links at
+adaptation iteration 𝜏.
+Each task is represented as 𝑇𝑖 = (𝑡𝑖arr, type𝑖 , 𝜙𝑖 , 𝑢𝑖 , 𝑛𝑖 ), where 𝑡𝑖arr
+is the arrival time, type𝑖 is the task type, 𝜙𝑖 ∈ R𝑑 is a feature vector,
+𝑢𝑖 ∈ [0, 1] is an urgency score, and 𝑛𝑖 is the request size. Controller
+𝐶 𝑗 estimates the expected processing time and acceptable waiting
+time and defines an internal deadline:
+(𝑝 )
+𝑝ˆ𝑖 = 𝑝ˆ (𝑇𝑖 ; 𝜃 𝑗 ),
+(𝑝 )
+
+𝑤ˆ 𝑖 = 𝑤ˆ (𝑇𝑖 ; 𝜃 𝑗(𝑤 ) ),
+
+𝐷𝑖 = 𝑡𝑖arr + 𝑝ˆ𝑖 + 𝑤ˆ 𝑖 .
+
+Here, 𝜃 𝑗 and 𝜃 𝑗(𝑤 ) are local prediction parameters. The deadline 𝐷𝑖
+is an internal operational target rather than an externally imposed
+hard constraint. If 𝑇𝑖 is assigned to 𝐸𝑘 , the observed outcome is
+
+real , 𝑞 real , 𝑐 real , 𝑦 text ), including processing time, quality, cost,
+𝑌𝑖𝑘 = (𝑝𝑖𝑘
+𝑖𝑘
+𝑖𝑘
+𝑖𝑘
+and the generated response.
+
+2.3
+
+Routing Decision and Feedback
+
+For each task–agent pair (𝑇𝑖 , 𝐸𝑘 ), the controller computes
+score(𝐸𝑘 ,𝑇𝑖 ) = w⊤ f (𝐸𝑘 ,𝑇𝑖 ) − 𝜅 1𝑑𝑖𝑘 − 𝜅 2 max{0, 𝑟𝑖𝑘 − 1}.
+Here, f (𝐸𝑘 ,𝑇𝑖 ) may include relevance, availability, predicted quality,
+speed, queue state, cost, reputation, and urgency-aware terms, while
+𝜅 1, 𝜅 2 ≥ 0 weight deadline-related penalties. The predicted finish
+finish , normalized deadline gap 𝑑 , time budget 𝑏 , and timetime 𝑡ˆ𝑖𝑘
+𝑖
+𝑖𝑘
+budget ratio 𝑟𝑖𝑘 are
+finish
+𝑡ˆ𝑖𝑘
+= 𝑡ˆ𝑘avail + 𝑝ˆ𝑖𝑘 ,
+
+𝑑𝑖𝑘 =
+
+𝑏𝑖 = max{𝑝ˆ𝑖 + 𝑤ˆ 𝑖 , 𝜀𝑏 },
+
+finish − 𝐷 }
+max{0, 𝑡ˆ𝑖𝑘
+𝑖
+
+𝑟𝑖𝑘 =
+
+,
+𝑏𝑖
+𝑡ˆ𝑘avail − 𝑡𝑖arr + 𝑝ˆ𝑖𝑘
+,
+𝑏𝑖
+
+where 𝜀𝑏 > 0 ensures numerical stability. The selected agent is
+𝑘𝑖 = arg max𝑘 ∈1,...,𝑛 score(𝐸𝑘 ,𝑇𝑖 ).
+After completion, the controller receives
+
+real
+real real
+O𝑖 = 𝑝𝑖𝑘
+, 𝑤𝑖real, 𝑞𝑖𝑘
+, 𝑐𝑖𝑘𝑖 , I{𝐶𝑖 ≤ 𝐷𝑖 } ,
+𝑖
+𝑖
+where 𝐶𝑖 is the completion time and the last term indicates deadline satisfaction. This feedback updates local prediction models for
+processing time, acceptable waiting time, and quality. Since each
+controller observes only the tasks routed through it, local histories
+may be biased toward different task types and agent outcomes. To
+reduce this effect without centralizing data, controllers may periodically align prediction parameters through the communication
+graph. Later sections compare distributed zeroth-order mechanisms
+for this adaptation, including SPSA-based and accelerated SPSAbased variants.
+
+2.4
+
+Controller-Level Load Balancing
+
+Incoming tasks are also distributed among controllers through decentralized load balancing. Controllers exchange information only
+with neighbors in G(𝜏); the load of controller 𝐶 𝑗 can be represented
+as 𝑥 𝑗 (𝑡) = 𝑞 𝑗 (𝑡)/𝑝¯ 𝑗 , where 𝑞 𝑗 (𝑡) is its weighted queue load and 𝑝¯ 𝑗
+is its average productivity. This balancing can be performed using
+the Local Voting Protocol or A-LVP [3, 4, 10]. Thus, controller-level
+balancing determines which local history is used for prediction,
+while agent-level routing determines the realized task outcome.
+Both affect the observed metrics and motivate the replay-based
+protocol introduced next.
+
+3
+
+Replay-Based Evaluation Protocol
+
+The goal of the protocol is to compare adaptive routing policies
+under controlled stochastic conditions. If each policy is evaluated
+by an independent online run, differences in performance may be
+caused not only by routing decisions, but also by random LLM
+generation, API variability, or judge noise. We therefore fix both
+the task stream and the potential task–agent outcomes before comparing policies. All policies are evaluated on the same ordered
+task stream T𝑁 = {𝑇1, . . . ,𝑇𝑁 }, where each task is represented as
+𝑇𝑖 = (𝑡𝑖arr, type𝑖 , 𝜙𝑖 , 𝑢𝑖 , 𝑛𝑖 ). For this stream and the set of LLM agents
+
+Adaptive Decentralized Multi-LLM Orchestration
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+E = {𝐸 1, . . . , 𝐸𝑛 }, we construct an outcome table
+
+real real real text 
+Y = 𝑌𝑖𝑘 = 𝑝𝑖𝑘
+, 𝑞𝑖𝑘 ,𝑐𝑖𝑘 , 𝑦𝑖𝑘 :
+
+deadline misses. When a quality predictor is used, we additionally
+report
+𝑁
+2
+1 ∑︁ 
+real
+𝑞ˆ𝑖𝑘𝑖𝜋 − 𝑞𝑖𝑘
+.
+(3)
+QMSE𝜋 =
+𝜋
+𝑖
+𝑁 𝑖=1
+
+𝑖 = 1, . . . , 𝑁 , 𝑘 = 1, . . . , 𝑛 ,
+real is the observed processing time, 𝑞 real ∈ [0, 1] is the
+where 𝑝𝑖𝑘
+𝑖𝑘
+real is the execution cost, and 𝑦 text is the response
+quality signal, 𝑐𝑖𝑘
+𝑖𝑘
+returned by agent 𝐸𝑘 for task 𝑇𝑖 . In simulation mode, these outcomes are generated from fixed stochastic agent profiles under fixed
+random seeds. In real-endpoint mode, they are obtained in a precollection phase by sending each task to each agent and caching the
+resulting responses, latencies, token usage, costs, and judge scores.
+During replay, policy 𝜋 processes the fixed task stream sequentially. At step 𝑖, it selects an agent based on its own history and
+state,
+
+𝐸𝑘𝜋𝑖 = 𝜋 (H𝑖𝜋 , S𝑖𝜋 ),
+
+𝑌𝑖𝜋 = 𝑌𝑖𝑘𝑖𝜋 ∈ Y.
+
+The selected cached outcome 𝑌𝑖𝜋 is then returned to the policy
+as feedback. Different policies may therefore produce different
+trajectories because they choose different agents and update their
+parameters differently, but they are evaluated against the same task
+stream and the same potential outcomes. This separates routing
+and adaptation behavior from repeated stochastic LLM calls.
+The quality signal is also fixed at the task–agent level. In simulation mode, quality combines a binary success signal and a timeliness
+score, while in real-endpoint mode the response is additionally evaluated by an LLM judge:
+!
+real − 𝑡 ref }
+max{0, 𝑝𝑖𝑘
+𝑖
+𝑖
+T𝑖 = exp −
+,
+𝑡𝑖ref
+𝑄𝑖 = 𝛼𝑄 𝑆𝑖 + (1 − 𝛼𝑄 )T𝑖 ,
+
+judge
+
+𝑄𝑖real = 𝜆𝑄 𝑞𝑖
+
++ (1 − 𝜆𝑄 )T𝑖 ,
+
+where 𝑆𝑖 ∈ {0, 1} is the success indicator, 𝑡𝑖ref is the reference processing time, 𝛼𝑄 ∈ [0, 1] controls the contribution of the success
+judge
+component, 𝑞𝑖
+∈ [0, 1] is the judge score, and 𝜆𝑄 ∈ [0, 1] is the
+judge-quality weight. Judge outputs are cached together with the
+corresponding task–agent response, so replay does not introduce
+additional judge calls.
+We report both operational routing metrics and prediction losses.
+For a policy 𝜋, the main operational metrics are the mean routing
+objective and deadline hit rate:
+𝑁
+
+𝜋
+
+𝑅 =
+
+1 ∑︁
+score(𝐸𝑘𝑖𝜋 ,𝑇𝑖 ),
+𝑁 𝑖=1
+
+𝑁
+
+DHR𝜋 =
+
+1 ∑︁
+I{𝐶𝑖𝜋 ≤ 𝐷𝑖 }.
+𝑁 𝑖=1
+
+(1)
+
+Here, 𝐶𝑖𝜋 is the completion time of task 𝑇𝑖 under policy 𝜋, and 𝐷𝑖 is
+the internal deadline. Higher values of both metrics are better.
+For prediction quality, we use the processing-time loss and the
+one-sided wait-prediction loss:
+
+2
+real
+𝐹 1 (𝜃 (𝑝 ) ) = E 𝑥𝑖⊤𝜃 (𝑝 ) − 𝑝𝑖𝑘
+,
+𝑖
+(2)
+h
+i
+
+2
+𝐹 2 (𝜃 (𝑤 ) ) = E max 𝑤𝑖real + 𝛿 − 𝑥𝑖⊤𝜃 (𝑤 ) , 0
+.
+The loss 𝐹 1 measures processing-time prediction error. The loss 𝐹 2
+penalizes underestimation of acceptable waiting time, which would
+otherwise produce overly tight internal deadlines and increase
+
+All metrics are computed on the same task stream and outcome
+table for every policy, and results are aggregated across random
+seeds as mean ± standard deviation. Additional model and protocol
+details, including task-pool construction, judge prompting, fallback
+rules, routing sub-scores, calibration constants, and hyperparameter
+grids, are provided in Appendix A.
+
+4
+
+A-SPSA-Based Parameter Adaptation
+
+We introduce a parameter-optimization mechanism for the routing controllers responsible for predicting task processing time and
+admissible waiting time. These parameters are used to compute
+the predicted finish time, the internal deadline, and the routing
+score; therefore, their adaptation directly affects the quality of
+task assignment to LLM agents. The mechanism is based on distributed accelerated consensus-based SPSA [8], which combines
+two-point zeroth-order evaluations, an accelerated surrogate update, and consensus-based parameter alignment among neighboring controllers.
+(𝑝 )
+Each controller 𝐶 𝑗 maintains two parameter vectors 𝜃 𝑗
+∈
+(𝑝 )
+
+R𝑑 , 𝜃 𝑗(𝑤 ) ∈ R𝑑 . The vector 𝜃 𝑗
+
+is used for processing-time predic-
+
+tion, whereas 𝜃 𝑗(𝑤 ) is used for wait-time budget prediction. These
+parameters are optimized with respect to the objective functions
+defined in (2). In what follows, 𝜃 𝑗 denotes either of these two parameter vectors, and 𝐹b𝑗,𝜏 (𝜃 𝑗 ) denotes the corresponding local empirical
+version of 𝐹 1 or 𝐹 2 , computed over the rolling window of recent
+observations available to controller 𝐶 𝑗 . At each adaptation iteration
+
+𝜏, the controllers communicate over the graph G(𝜏) = C, A (𝜏) ,
+where A (𝜏) is the set of active inter-controller links and 𝑏 𝑗ℓ (𝜏)
+is the communication weight between controllers 𝐶 𝑗 and 𝐶 ℓ . For
+controller 𝐶 𝑗 , the A-SPSA update is written as
+𝛼𝜏 𝛾𝜏 −1𝑧 𝑗,𝜏 −1 + 𝛾𝜏 𝜃 𝑗,2𝜏 −1
+𝜃e𝑗,𝜏 =
+,
+𝛾𝜏 −1 + 𝛼𝜏 (𝜇 − 𝜂)
+𝑥 𝑗,2𝜏 = 𝜃e𝑗,𝜏 + 𝛽𝜏+ Δ 𝑗,𝜏 ,
+𝑥 𝑗,2𝜏 −1 = 𝜃e𝑗,𝜏 − 𝛽𝜏− Δ 𝑗,𝜏 ,
+
+𝑑
+1 1
+Δ 𝑗,𝜏 ∈ − √ , √
+,
+𝑑 𝑑
+𝐹b𝑗,𝜏 (𝑥 𝑗,2𝜏 ) − 𝐹b𝑗,𝜏 (𝑥 𝑗,2𝜏 −1 )
+𝑔b𝑗,𝜏 =
+Δ 𝑗,𝜏
+𝛽𝜏+ + 𝛽𝜏−
+
+
+∑︁
++𝜔
+𝑏 𝑗ℓ (𝜏) 𝜃e𝑗,𝜏 − 𝜃eℓ,𝜏 ,
+
+(4)
+
+ℓ ∈ N𝑗 (𝜏 )
+
+𝜃 𝑗,2𝜏 = 𝜃e𝑗,𝜏 − ℎb
+𝑔 𝑗,𝜏 ,
+𝑧 𝑗,𝜏 =
+
+𝜃 𝑗,2𝜏+1 = 𝜃 𝑗,2𝜏 ,
+
+(1 − 𝛼𝜏 )𝛾𝜏 −1𝑧 𝑗,𝜏 −1 + 𝛼𝜏 (𝜇 − 𝜂)𝜃e𝑗,𝜏 − 𝛼𝜏 𝑔b𝑗,𝜏
+.
+𝛾𝜏
+
+Here, 𝜃e𝑗,𝜏 is the accelerated probing point at which controller 𝐶 𝑗
+collects zeroth-order information. The points 𝑥 𝑗,2𝜏 −1 and 𝑥 𝑗,2𝜏 are
+the two measurement points used within one adaptation iteration.
+They are constructed using the simultaneous perturbation vector
+Δ 𝑗,𝜏 , whose components are independent and take the two values
+
+K. Chernikov, E. Tarasova, and O. Granichin
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+Figure 1: Numerical comparison over 𝑁 = 800 tasks and seven independent seeds. Boxes show the interquartile range, center
+lines show medians, and whiskers extend to 1.5 times the interquartile range.
+with equal probability. Thus, the update direction requires only two
+evaluations of the local empirical objective 𝐹b𝑗,𝜏 , independently of
+the dimension 𝑑.
+The estimate 𝑔b𝑗,𝜏 consists of two terms. The first term is the SPSA
+estimate of the local descent direction. The second term is the consensus correction based on the discrepancy between controller 𝐶 𝑗
+and its neighbors N𝑗 (𝜏). The parameter 𝜔 > 0 controls the strength
+of inter-controller alignment. Therefore, the update accounts for
+both local prediction error and consistency of controller parameters
+across the network.
+The variable 𝑧 𝑗,𝜏 is the surrogate center. It accumulates information from previous iterations and is used to construct the next
+probing point. The accelerated dynamics are governed by 𝑧 𝑗,𝜏 together with the sequences 𝛼𝜏 and 𝛾𝜏 , defined by
+𝛼𝜏2
+ℎ = (1 − 𝛼𝜏 )𝛾𝜏 −1 + 𝛼𝜏 (𝜇 − 𝜂),
+1+𝜀
+𝛾𝜏 = (1 − 𝛼𝜏 −1 )𝛾𝜏 −1 + 𝛼𝜏 −1 (𝜇 − 𝜂).
+Here, ℎ is the descent step size, 𝜇 corresponds to the strong convexity parameter of the regularized objective, 𝜂 ∈ (0, 𝜇) is a stabilization parameter, and 𝜀 > 0 accounts for noise and nonstationary
+effects. In the implementation, 𝛼𝜏 may additionally be capped from
+above to avoid overly aggressive acceleration at the beginning of
+the online trajectory, when the rolling window contains only a
+limited number of observations.
+(𝑝 )
+(𝑝 )
+The same update is applied separately to 𝜃 𝑗 and 𝜃 𝑗(𝑤 ) . For 𝜃 𝑗 ,
+the local oracle 𝐹b𝑗,𝜏 corresponds to the processing-time prediction
+error. For 𝜃 𝑗(𝑤 ) , it corresponds to the one-sided wait-prediction
+loss. After the update, the new parameters are used in subsequent
+routing decisions: they affect the predicted finish time, the internal
+deadline, and the final routing score.
+Adaptation is performed periodically after new observations
+have been collected. Between adaptation iterations, controllers use
+(𝑝 )
+the current values of 𝜃 𝑗 and 𝜃 𝑗(𝑤 ) to route incoming tasks. Once
+tasks are completed, feedback is added to the rolling window, and
+the next A-SPSA update is computed from the updated local history:
+routing −→ feedback −→ rolling window update −→
+−→ A-SPSA adaptation −→ next routing decisions.
+
+Under the replay-based evaluation protocol, all policies use the
+same task stream and the same task–agent outcome table. Hence,
+the A-SPSA-based policy does not receive additional access to the
+environment; it differs only in the parameter-update mechanism.
+Other distributed zeroth-order methods are treated as experimental
+baselines and introduced in the experimental section.
+
+5
+
+Experiments
+
+We evaluate A-SPSA in three stages. First, we compare it with
+distributed zeroth-order baselines in a reproducible numerical simulation. We then examine the contribution of its main components
+and its sensitivity to the step-size scale. Finally, we evaluate the
+routing policies using responses collected from real LLM endpoints.
+Detailed task-generation rules, agent profiles, hyperparameter configurations, and supplementary trajectories are provided in Appendix B.
+
+5.1
+
+Numerical Evaluation
+
+Setup. The simulation includes three controllers and five heterogeneous agents. Tasks arrive according to a Poisson process with
+rate 𝜆 = 1.25 tasks per second and are sampled from five categories:
+PROGRAMMING, QA, SUMMARIZATION, TRANSLATION, and
+TOOL_USE, with prompts drawn from five established benchmarks
+(Appendix B.1, Table 3). Agent outcomes are generated from taskdependent latency, capability, and semantic profiles that induce a
+speed–quality trade-off.
+The main comparison uses 𝑁 = 800 tasks and seven independent
+seeds. Parameter adaptation is performed every five tasks using a
+rolling window of 25 completed tasks. A-SPSA is compared with
+consensus-based SPSA, Kiefer–Wolfowitz (KW), zeroth-order projected gradient descent (ZO-PGD), zeroth-order gradient tracking
+(ZO-GT), a two-point primal–dual method (PD-2pt), and singlepoint gradient tracking (SP-GT). All methods use identical task
+streams and task–agent outcomes and differ only in the controllerparameter update.
+Figure 1 reports Routing Objective, Deadline Hit Rate, and Wait
+MSE over the seven runs. A-SPSA achieves the highest median
+Routing Objective and Deadline Hit Rate and the lowest Wait MSE.
+The largest separation is observed for Deadline Hit Rate, suggesting
+
+Adaptive Decentralized Multi-LLM Orchestration
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+Figure 2: Component-level evaluation of A-SPSA. The left panel reports Routing Objective, Deadline Hit Rate, and Wait MSE;
+the right panel reports additional prediction-error metrics.
+that the accelerated update leads to more effective completion-time
+and deadline estimates in the considered setting. SP-GT exhibits
+the weakest operational performance and the largest degradation
+relative to the remaining methods.
+
+5.2
+
+Component-Level Evaluation of A-SPSA
+
+We compare the full A-SPSA update with two variants: a no-surrogate
+variant without accelerated momentum and a variant with a fixed
+acceleration coefficient. Each configuration is tuned independently
+on the same validation stream and evaluated under the same task
+and system configuration.
+Figure 2 shows that the full A-SPSA variant achieves the highest
+Routing Objective and Deadline Hit Rate. The no-surrogate variant
+attains a lower intermediate Wait MSE, but this reduction does
+not translate into better downstream routing performance. Fixing the acceleration coefficient degrades both operational metrics
+and increases prediction error. Table 1 reports the corresponding
+numerical values.
+Table 1: Ablation results reported as mean ± standard deviation.
+Variant
+
+Routing obj. ↑
+
+DHR ↑
+
+Wait MSE ↓
+
+No surrogate
+Fixed acceleration
+A-SPSA
+
+0.720 ± 0.018
+0.687 ± 0.019
+0.724 ± 0.024
+
+0.667 ± 0.023
+0.598 ± 0.039
+0.694 ± 0.029
+
+0.627 ± 0.805
+1.060 ± 1.496
+1.796 ± 1.864
+
+5.3
+
+Small values of 𝑎 lead to under-adaptation, whereas Routing
+Objective and Wait MSE improve as the step-size scale increases.
+Deadline Hit Rate remains close to its maximum over the upper
+part of the tested range. The results indicate that the selected value
+𝑎 = 0.1 provides strong performance without requiring fine-grained
+tuning.
+
+5.4
+
+Real-LLM Evaluation
+
+Setup. We evaluate the routing policies on 200 tasks from two
+independent streams with seeds {11, 42} using five Groq endpoints:
+• llama-3.1-8b-instant
+• openai/gpt-oss-20b
+• allam-2-7b
+• llama-4-scout-17b-16e-instruct
+• qwen/qwen3-32b
+The experiment follows the shared-execution-cache protocol from
+Section 3. Each task is first submitted to every endpoint, and the
+generated response and judge-based quality score are cached. The
+routing policies are then replayed against the same cache without
+additional LLM calls.
+API latency is replaced by a sample from the corresponding
+controlled agent profile, while quality is computed from the actual generated response. Adaptation is performed after each task,
+yielding approximately 186 updates after the warm-up period.
+Figure 4 shows the online evolution of Deadline Hit Rate. A-SPSA
+exhibits an initial adaptation transient, but after sufficient feedback
+has accumulated it recovers and maintains the highest sustained
+deadline performance over most of the remaining task stream.
+
+Hyperparameter Sensitivity of A-SPSA
+
+Figure 3 examines the sensitivity of A-SPSA to the step-size scale 𝑎
+in 𝛼𝜏 = 𝑎/(𝜏 + 11) 0.602 .
+
+Figure 3: Sensitivity of A-SPSA to the step-size scale 𝑎. The
+vertical dashed line marks the selected value 𝑎 = 0.1.
+
+Figure 4: Deadline Hit Rate in the real-LLM evaluation.
+Curves show rolling means with a window of 30 tasks; shaded
+regions show one standard deviation over seeds {11, 42}.
+
+K. Chernikov, E. Tarasova, and O. Granichin
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+Table 2: Real-LLM results over 200 tasks, reported as mean ± standard deviation over seeds {11, 42}.
+Metric
+Routing Objective ↑
+DHR ↑
+Wait MSE ↓
+
+A-SPSA
+
+ZO-GT
+
+KW
+
+PD-2pt
+
+ZO-PGD
+
+SPSA
+
+SP-GT
+
+0.839 ± 0.001
+0.722 ± 0.004
+0.162 ± 0.093
+
+0.835 ± 0.002
+0.695 ± 0.021
+0.189 ± 0.141
+
+0.834 ± 0.004
+0.680 ± 0.042
+0.239 ± 0.234
+
+0.834 ± 0.008
+0.688 ± 0.053
+0.213 ± 0.154
+
+0.832 ± 0.009
+0.677 ± 0.032
+0.241 ± 0.195
+
+0.831 ± 0.010
+0.690 ± 0.049
+0.243 ± 0.176
+
+0.764 ± 0.007
+0.562 ± 0.011
+0.223 ± 0.172
+
+Table 2 shows that A-SPSA achieves the highest Routing Objective and Deadline Hit Rate and the lowest Wait MSE. ZO-GT
+provides the closest competing result, whereas SP-GT remains substantially below the other methods in both operational metrics.
+Code is available at https://github.com/newpotatato/decentralizedllm-spsa.
+
+6
+
+Trustworthiness, Biases, and Limitations
+
+The replay-based protocol improves comparability by exposing all
+routing policies to the same task streams and potential task–agent
+outcomes. However, it does not remove all sources of bias. The numerical evaluation relies on hand-designed agent profiles, while the
+real-LLM experiment uses a limited set of Groq endpoints and only
+two task streams. In addition, API latency is replaced by controlled
+samples, so the real-output evaluation does not capture providerside congestion, rate limits, or failures. Quality estimates depend on
+the selected LLM judge and may inherit its preferences or modelspecific biases. The evaluated task categories and datasets also cover
+only a subset of practical orchestration workloads. Finally, the experiments use three controllers and five agents; scalability to larger
+controller networks, denser communication graphs, and broader
+model pools remains to be studied. The consensus-correction term
+in the A-SPSA update (Eq. 4) assumes synchronous communication,
+without an explicit communication-delay term. This matches the
+current co-located setting, where communication cost is negligible
+relative to the adaptation interval. In a deployment with physically
+separate controllers, round-trip parameter-exchange time could
+become comparable to or larger than the adaptation interval, requiring an explicit delay-aware term (e.g., stale neighbor estimates
+𝜃 ℓ,𝜏 −𝑑 𝑗 ℓ ) and a quantitative treatment of communication overhead,
+which we leave to future work.
+
+7
+
+Conclusion
+
+We presented a replay-based framework for evaluating adaptive
+multi-LLM routing policies under controlled task streams and task–
+agent outcomes. Within this framework, we adapted accelerated
+consensus-based SPSA to the online optimization of controller prediction parameters. Across numerical simulations, component-level
+analysis, and real-LLM outputs, A-SPSA achieved the strongest overall balance between routing utility, deadline compliance, and waittime prediction error. The results also show that lower intermediate
+prediction loss does not necessarily imply better downstream routing performance. Future work will extend the evaluation to larger
+controller networks, additional LLM providers, judge-robustness
+checks, naturally observed latency profiles, and more diverse agentic workloads.
+
+Acknowledgments
+This work was supported by the Ministry of Economic Development
+of the Russian Federation (Agreement No. 139-15-2025-007, dated
+April 16, 2025; ID: 000000C313925P3O0002).
+
+References
+[1] Arya Akhavan, Massimiliano Pontil, and Alexandre B. Tsybakov. 2021. Distributed Zero-Order Optimization under Adversarial Noise. In Advances
+in Neural Information Processing Systems, Vol. 34. Curran Associates, Inc.,
+10209–10220.
+https://proceedings.neurips.cc/paper_files/paper/2021/file/
+5487e79fa0ccd0b79e5d4a4c8ced005d-Paper.pdf
+[2] Alfonso Amayuelas, Jingbo Yang, Saaket Agashe, Ashwin Nagarajan, Antonis
+Antoniades, Xin Eric Wang, and William Wang. 2025. Self-Resource Allocation
+in Multi-Agent LLM Systems. arXiv:2504.02051 [cs.MA] doi:10.48550/arXiv.2504.
+02051
+[3] Natalia Amelina, Alexander Fradkov, Yuming Jiang, and Dimitrios J. Vergados.
+2015. Approximate Consensus in Stochastic Networks With Application to Load
+Balancing. IEEE Transactions on Information Theory 61, 4 (2015), 1739–1752.
+doi:10.1109/TIT.2015.2406323
+[4] Natalia Amelina, Oleg Granichin, and Aleksandra Kornivetc. 2013. Local Voting
+Protocol in Decentralized Load Balancing Problem with Switched Topology,
+Noise, and Delays. In Proceedings of the 52nd IEEE Conference on Decision and
+Control. 4613–4618. doi:10.1109/CDC.2013.6760604
+[5] Jacob Austin, Augustus Odena, Maxwell Nye, Maarten Bosma, Henryk
+Michalewski, David Dohan, Ellen Jiang, Carrie Cai, Michael Terry, Quoc V. Le,
+and Charles Sutton. 2021. Program Synthesis with Large Language Models. arXiv
+preprint arXiv:2108.07732 (2021). doi:10.48550/arXiv.2108.07732
+[6] Lingjiao Chen, Matei Zaharia, and James Zou. 2024. FrugalGPT: How to Use Large
+Language Models While Reducing Cost and Improving Performance. Transactions
+on Machine Learning Research (2024). Featured Certification. doi:10.48550/arXiv.
+2305.05176
+[7] Songsong Cheng, Xin Yu, Yuan Fan, and Gaoxi Xiao. 2023. Zeroth-order Gradient
+Tracking for Distributed Constrained Optimization. IFAC-PapersOnLine 56, 2
+(2023), 5197–5202. 22nd IFAC World Congress. doi:10.1016/j.ifacol.2023.10.115
+[8] Victoria Erofeeva, Oleg Granichin, and Anna Sergeenko. 2026. Accelerated
+Consensus-Based SPSA Algorithm for Multisensor Multitarget Tracking Problem.
+IEEE Trans. Automat. Control (2026). doi:10.1109/TAC.2026.3678473
+[9] Victoria Erofeeva, Oleg Granichin, Munira Tursunova, Anna Sergeenko, and
+Yuming Jiang. 2022. Accelerated Simultaneous Perturbation Stochastic Approximation for Tracking Under Unknown-but-Bounded Disturbances. In Proceedings
+of the 2022 American Control Conference. 1582–1587. doi:10.23919/ACC53348.
+2022.9867491
+[10] Victoria Erofeeva, Oleg Granichin, and Elena Volodina. 2024. Accelerated Decentralized Load Balancing in Multi-Agent Networks. IEEE Access 12 (2024),
+161954–161967. doi:10.1109/ACCESS.2024.3488399
+[11] Oleg Granichin and Natalia Amelina. 2015. Simultaneous Perturbation Stochastic
+Approximation for Tracking Under Unknown but Bounded Disturbances. IEEE
+Trans. Automat. Control 60, 6 (2015), 1653–1658. doi:10.1109/TAC.2014.2359711
+[12] Oleg Granichin, Victoria Erofeeva, Yury Ivanskiy, and Yuming Jiang. 2021. Simultaneous Perturbation Stochastic Approximation-Based Consensus for Tracking
+Under Unknown-But-Bounded Disturbances. IEEE Trans. Automat. Control 66, 8
+(2021), 3710–3717. doi:10.1109/TAC.2020.3024169
+[13] Mandar Joshi, Eunsol Choi, Daniel S. Weld, and Luke Zettlemoyer. 2017. TriviaQA:
+A Large Scale Distantly Supervised Challenge Dataset for Reading Comprehension. In Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), Regina Barzilay and Min-Yen Kan
+(Eds.). Association for Computational Linguistics, Vancouver, Canada, 1601–1611.
+doi:10.18653/v1/P17-1147
+[14] Jinlong Lei, Han-Fu Chen, and Hai-Tao Fang. 2016. Primal–Dual Algorithm
+for Distributed Constrained Optimization. Systems & Control Letters 96 (2016),
+110–117. doi:10.1016/j.sysconle.2016.07.009
+[15] Xiao Liu, Hao Yu, Hanchen Zhang, Yifan Xu, Xuanyu Lei, Hanyu Lai, Yu Gu,
+Hangliang Ding, Kaiwen Men, Kejuan Yang, Shudan Zhang, Xiang Deng, Aohan
+Zeng, Zhengxiao Du, Chenhui Zhang, Sheng Shen, Tianjun Zhang, Yu Su, Huan
+
+Adaptive Decentralized Multi-LLM Orchestration
+
+Sun, Minlie Huang, Yuxiao Dong, and Jie Tang. 2024. AgentBench: Evaluating
+LLMs as Agents. In International Conference on Learning Representations. https:
+//openreview.net/forum?id=zAdUB0aCTQ
+[16] Yang Liu, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang
+Zhu. 2023. G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment.
+In Proceedings of the 2023 Conference on Empirical Methods in Natural Language
+Processing. Association for Computational Linguistics, 2511–2522. doi:10.18653/
+v1/2023.emnlp-main.153
+[17] Elissa Mhanna and Mohamad Assaad. 2023. Single Point-Based Distributed
+Zeroth-Order Optimization with a Non-Convex Stochastic Objective Function.
+In Proceedings of the 40th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 202), Andreas Krause, Emma Brunskill,
+Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett (Eds.).
+PMLR, 24701–24719. https://proceedings.mlr.press/v202/mhanna23a.html
+[18] Shashi Narayan, Shay B. Cohen, and Mirella Lapata. 2018. Don’t Give Me the
+Details, Just the Summary! Topic-Aware Convolutional Neural Networks for Extreme Summarization. In Proceedings of the 2018 Conference on Empirical Methods
+in Natural Language Processing, Ellen Riloff, David Chiang, Julia Hockenmaier,
+and Jun’ichi Tsujii (Eds.). Association for Computational Linguistics, Brussels,
+Belgium, 1797–1807. doi:10.18653/v1/D18-1206
+[19] NousResearch. 2024. Hermes Function-Calling V1. https://huggingface.co/
+datasets/NousResearch/hermes-function-calling-v1. Hugging Face dataset repository, accessed: 2026-06-12.
+[20] Isaac Ong, Amjad Almahairi, Vincent Wu, Wei-Lin Chiang, Tianhao Wu, Joseph E.
+Gonzalez, M. Waleed Kadous, and Ion Stoica. 2025. RouteLLM: Learning to Route
+LLMs from Preference Data. In International Conference on Learning Representations. https://openreview.net/forum?id=8sSqNntaMr
+[21] OPUS Project. 2020. OPUS-100 Corpus. https://opus.nlpl.eu/opus-100.php. Accessed: 2026-06-12.
+[22] Anit Kumar Sahu, Dusan Jakovetic, Dragana Bajovic, and Soummya Kar. 2018. Distributed Zeroth Order Optimization Over Random Networks: A Kiefer-Wolfowitz
+Stochastic Approximation Approach. In Proceedings of the 57th IEEE Conference
+on Decision and Control. IEEE, 4951–4958. doi:10.1109/CDC.2018.8619044
+[23] Anna Sergeenko, Victoria Erofeeva, Oleg Granichin, Olga Granichina, and Anton
+Proskurnikov. 2021. Convergence Analysis of Weighted SPSA-based Consensus
+Algorithm in Distributed Parameter Estimation Problem. IFAC-PapersOnLine
+54, 7, 126–131. 19th IFAC Symposium on System Identification SYSID 2021.
+doi:10.1016/j.ifacol.2021.08.346
+[24] James C. Spall. 1992. Multivariate Stochastic Approximation Using a Simultaneous Perturbation Gradient Approximation. IEEE Trans. Automat. Control 37, 3
+(1992), 332–341. doi:10.1109/9.119632
+[25] Elizaveta Tarasova, Victoria Erofeeva, Oleg Granichin, and Kirill Chernikov.
+2025. Decentralized Adaptive Task Allocation for Dynamic Multi-Agent Systems.
+Scientific Reports 15 (2025), 39226. doi:10.1038/s41598-025-21709-9
+[26] Asaf Yehudai, Lilach Eden, Alan Li, Guy Uziel, Yilun Zhao, Roy Bar-Haim, Arman
+Cohan, and Michal Shmueli-Scheuer. 2025. Survey on Evaluation of LLM-based
+Agents. arXiv:2503.16416 [cs.AI] doi:10.48550/arXiv.2503.16416
+[27] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu,
+Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang,
+Joseph E. Gonzalez, and Ion Stoica. 2023. Judging LLM-as-a-Judge with MTBench and Chatbot Arena. In Advances in Neural Information Processing Systems, Vol. 36.
+https://proceedings.neurips.cc/paper_files/paper/2023/hash/
+91f18a1287b398d378ef22505bf41832-Abstract-Datasets_and_Benchmarks.html
+[28] Mingchen Zhuge, Changsheng Zhao, Dylan R. Ashley, Wenyi Wang, Dmitrii
+Khizbullin, Yunyang Xiong, Zechun Liu, Ernie Chang, Raghuraman Krishnamoorthi, Yuandong Tian, Yangyang Shi, Vikas Chandra, and Jürgen Schmidhuber. 2025.
+Agent-as-a-Judge: Evaluate Agents with Agents. In Proceedings of the 42nd International Conference on Machine Learning (Proceedings of Machine Learning
+Research, Vol. 267), Aarti Singh, Maryam Fazel, Daniel Hsu, Simon Lacoste-Julien,
+Felix Berkenkamp, Tegan Maharaj, Kiri Wagstaff, and Jerry Zhu (Eds.). PMLR,
+80569–80611. https://proceedings.mlr.press/v267/zhuge25a.html
+
+A
+
+Additional Modeling and Calibration Details
+
+This appendix summarizes the modeling choices and calibration
+details omitted from the main text for compactness.
+
+A.1
+
+Task Complexity and Semantic Features
+
+Each task 𝑇𝑖 is associated with a semantic feature vector 𝜙𝑖 ∈ R5 ,
+where 𝜙𝑖,ℓ is the normalized keyword-frequency score along task
+Í
+axis ℓ and ℓ 𝜙𝑖,ℓ = 1. In the main text, the prediction feature vector
+is restricted to the one-hot task-type encoding 𝑥𝑖 = 𝑒 type𝑖 ∈ R5 ,
+while semantic variation within a task type is represented separately
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+through 𝜙𝑖 and the scalar complexity score
+
+ℎ𝑖 = clip 2 + 4𝜙𝑖,type𝑖 + 2ℓ𝑖 + 𝑏𝑖kw, 1, 10 ,
+ℓ𝑖 = min(|𝑤𝑖 |/800, 1.5),
+𝑏𝑖kw = 0.4|K𝑖 |,
+Here |𝑤𝑖 | denotes the prompt length in characters, and K𝑖 is the
+set of technical complexity indicators present in the prompt. In the
+experiments, the keyword set is
+K𝑖 ⊆ {optimize, pipeline, debug, production, integration, benchmark}.
+Thus, ℎ𝑖 serves as a compact proxy for task difficulty, combining
+declared task type, prompt length, and the presence of complexityrelated keywords.
+
+A.2
+
+Choice of Forgetting Factor in RLS
+
+All three online predictors use recursive least squares with exponential forgetting factor 𝛽 = 0.99. This value was chosen as
+a compromise between stability and responsiveness. Its effective
+memory window is approximately
+1
+= 100
+1−𝛽
+recent observations. With five task types and roughly balanced
+arrivals, this corresponds to approximately 20 recent examples per
+type, which is sufficient for stable linear updates while remaining
+responsive to gradual drift in agent behavior.
+Larger values, such as 𝛽 = 0.999, were found to react too slowly
+to changes in latency or output quality, while smaller values, such
+as 𝛽 = 0.95, led to high-variance updates in the early phase, when
+the number of available samples per type is still limited.
+
+A.3
+
+Quality Signal Calibration
+
+After task completion, the judge module computes a composite
+quality score
+𝑄𝑖 = 𝛼𝑄 𝑆𝑖 + (1 − 𝛼𝑄 )T𝑖 ,
+where 𝑆𝑖 ∈ {0, 1} indicates task success and
+ max(0, 𝑝 real − 𝑡𝑖ref ) 
+𝑖,𝑘𝑖
+T𝑖 = exp −
+,
+𝑡𝑖ref
+
+avg
+𝑡𝑖ref = 𝜏𝑘 (type𝑖 ) 1 + ℎ𝑖 /10 .
+𝑖
+
+The coefficient 𝛼𝑄 = 0.6 was selected on a held-out calibration set.
+This choice reflects the asymmetric value of the two components: an
+incorrect response is typically useless regardless of latency, whereas
+a correct but moderately delayed response may still be valuable. In
+preliminary tests, smaller values of 𝛼𝑄 overemphasized timeliness,
+whereas larger values made latency almost irrelevant.
+
+A.4
+
+Quality Predictor Features
+
+The online quality predictor uses the feature vector
+ ⊤
+⊤
+𝑧𝑖𝑘 = 𝑒 type
+, 𝜙𝑖,type𝑖 , 𝜓¯𝑘 , 𝑝ˆ𝑖 , 𝑤ˆ 𝑖 ∈ R9,
+𝑖
+where 𝑒 type𝑖 ∈ R5 is the one-hot task-type indicator, 𝜙𝑖,type𝑖 ∈ [0, 1]
+is the semantic alignment score along the declared task axis,
+5
+1 ∑︁
+𝜓¯𝑘 =
+𝜓𝑘,ℓ
+5 ℓ=1
+
+K. Chernikov, E. Tarasova, and O. Granichin
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+is the mean capability score of agent 𝐸𝑘 , and 𝑝ˆ𝑖 , 𝑤ˆ 𝑖 are the current processing-time and wait-tolerance predictions. This design
+preserves type information while keeping the feature dimension
+small.
+
+A.5
+
+A.6
+
+𝑑𝑘 =
+
+ˆ 𝑠𝑡 , 𝑠𝑞 , 𝑠𝑐 , 𝑠𝑟 , 𝑠𝑢 ] ⊤ . Its comThe routing feature vector is f = [𝑅, 𝐴, 𝑄,
+ponents are defined as follows.
+Semantic relevance.
+𝜙𝑖⊤𝜓𝑘
+.
+∥𝜙𝑖 ∥ ∥𝜓𝑘 ∥ + 10−8
+
+This is the cosine similarity between task semantics and the capability profile of agent 𝐸𝑘 .
+Availability and queue features.
+
+
+𝑡 free
+𝐴𝑘𝑖 = exp −
+,
+max(𝑤ˆ 𝑖 + 0.5, 0.5)
+
+
+𝑡 free
+𝑠𝑞 = exp −
+.
+max(𝑤ˆ 𝑖 + 0.5, 0.5)
+
+𝑡ˆavail − 𝑡 + 𝑝ˆ𝑖,𝑘
+𝑟𝑘 = 𝑘
+,
+𝑏𝑖
+𝑏𝑖 = max(𝑝ˆ𝑖 + 𝑤ˆ 𝑖 , 0.75),
+,
+
+where the floor of 0.75 in 𝑏𝑖 prevents numerical instability for very
+short tasks.
+The routing penalties use
+𝜅 1 = 0.30 + 0.55𝜍𝑖 ,
+
+𝑡 free = 𝑡ˆ𝑘avail − 𝑡 ≥ 0,
+
+
+𝑝ˆ𝑖,𝑘
+.
+max(𝑝ˆ𝑖 + 0.5, 0.5)
+
+Here 𝑝ˆ𝑖,𝑘 is an agent-specific processing-time estimate. In the implementation, it is constructed as a convex combination of a type-level
+RLS prediction rescaled by the agent’s relative latency and a profilebased estimate adjusted for prompt length and semantic mismatch.
+Cost feature.
+𝑠𝑐 = exp(−𝑐𝑘 /0.3).
+This form imposes an exponential penalty on expensive agents
+while preserving some differentiation across the tested price range.
+
+The local and global terms are updated as
+
+Weight Vector and Adaptive Blending
+
+The baseline weight vector is
+w̃ = (0.17, 0.10, 0.13, 0.20, 0.15, 𝜔 cost, 0.06, 0.19),
+
+𝜔 cost = 0.12,
+
+and the operational weight vector is obtained by ℓ1 normalization:
+w=
+
+w̃
+.
+∥ w̃∥ 1
+
+Under high load, the routing policy blends w toward a throughputoriented profile. System pressure is measured by
+
+
+min(𝑞 press, 1.5)
+𝜋 = clip 0.45𝑓busy + 0.35
++ 0.20𝜍𝑖 , 0, 1 ,
+1.5
+1 ∑︁
+𝑓busy =
+1[𝑎𝑘 > 𝑡],
+𝑛
+𝑞 press =
+
+1
+𝑛
+
+𝑘
+𝑛
+∑︁
+
+max(0, 𝑡ˆ𝑘avail − 𝑡)
+
+𝑘=1
+
+𝑏𝑖 + 0.5
+
+,
+
+where 𝑓busy is the fraction of agents currently busy and 𝑞 press is the
+mean normalized queue pressure. If 𝜋 > 𝜃 𝜋 = 0.62, the blend factor
+is
+𝜋 − 𝜃𝜋
+𝜆=
+,
+1 − 𝜃𝜋
+and the effective weight vector becomes
+weff = (1 − 𝜆)w + 𝜆wem,
+
+Reputation feature.
+1
+1 global
+𝑠𝑟 = 𝑟 local
+(type𝑖 ) + 𝑟𝑘
+(type𝑖 ).
+2 𝑗𝑘
+2
+
+𝜅 2 = 0.08.
+
+Thus, deadline overruns become more strongly penalized for urgent tasks, while time-budget overruns receive a smaller secondary
+penalty.
+
+A.7
+
+Although 𝐴𝑘𝑖 and 𝑠𝑞 share the same closed form, they are retained
+as separate features so that their aggregate contribution can be
+tuned through distinct weights during routing.
+Processing-speed feature.
+
+𝑠𝑡 = exp −
+
+max(0, 𝑡ˆ𝑘finish − 𝐷𝑖 )
+
+𝑏𝑖
+𝑡ˆ𝑘finish = 𝑡ˆ𝑘avail + 𝑝ˆ𝑖,𝑘 ,
+
+Routing Sub-Scores
+
+𝑅𝑘𝑖 =
+
+Penalty Terms and Service Budget
+
+The deadline gap and time-budget ratio are defined by
+
+where
+wem = (0.05, 0.08, 0.07, 0.28, 0.20, 0.02, 0.08, 0.24).
+This emergency profile shifts mass away from quality and cost
+
+features and toward processing-speed and urgency-aware routing.
+local
+𝑟 local
+𝛼𝑡 = 0.1 + 0.4𝑐𝑡 ,
+𝑗𝑘 (ℓ) ← (1 − 𝛼𝑡 ) 𝑟 𝑗𝑘 (ℓ) + 𝛼𝑡 𝑄 𝑡 ,
+
+global
+global
+𝑟𝑘
+(ℓ) ← 0.90 𝑟𝑘
+(ℓ) + 0.10 clip 0.55𝜌ˆ𝑘,ℓ + 0.45𝑃𝑘succ (ℓ), 0.05, 0.98 ,
+2
+
+A.8
+
+where 𝑄𝑡 is the observed quality score of the completed task, 𝑐𝑡 ∈
+[0, 1] is the judge confidence, 𝜌ˆ𝑘,ℓ is the empirical posterior success
+estimate, and 𝑃𝑘succ (ℓ) is the benchmark-based prior.
+Urgency-aware deadline feature.
+
+
+𝑠𝑢 = exp −(1 + 3𝜍𝑖 )𝑑𝑘 exp −0.45𝜍𝑖 max(0, 𝑟𝑘 − 1) .
+This term penalizes deadline overruns and budget violations more
+strongly for urgent tasks.
+
+Choice of the Hinge Margin in 𝐹
+
+The wait-tolerance objective is
+h
+i
+
+2
+𝐹 2 (𝜃 (𝑤 ) ) = E max 𝑤𝑖real + 𝛿 − 𝑥𝑖⊤𝜃 (𝑤 ) , 0 ,
+with 𝛿 = 0.1 s. This margin serves two purposes. First, it reduces
+sensitivity to small measurement fluctuations in wait-time observations. Second, it introduces a mild conservative bias, encouraging
+the system to avoid overly tight deadlines. Smaller values of 𝛿 led
+to unstable behavior under noise, whereas larger values produced
+systematically slack wait-time predictions.
+
+Adaptive Decentralized Multi-LLM Orchestration
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+Figure 5: Evolution of numerical metrics over the task stream for seeds {11, 42, 123}.
+
+A.9
+
+Why These Details Are Omitted from the
+Main Text
+
+Table 5: Hyperparameters selected on the independent validation stream.
+
+The system model in the main paper is intentionally limited to
+the core definitions required to understand the routing mechanism
+and the optimization objectives. The detailed forms of the routing
+sub-scores, reputation updates, coefficient choices, and blending
+heuristic are included here to document the full implementation
+while keeping the main text concise.
+
+B Additional Experimental Details
+B.1 Task Generation and Agent Profiles
+In the numerical experiments, task types are sampled with probabilities 0.25, 0.20, 0.20, 0.15, and 0.20 for PROGRAMMING, QA,
+SUMMARIZATION, TRANSLATION, and TOOL_USE, respectively.
+Prompts are sampled without replacement within each run from
+the datasets listed in Table 3. Each task is additionally assigned a
+complexity score sampled uniformly from [1, 5], an urgency value
+in [0, 1], a semantic feature vector, and an arrival time generated
+from exponentially distributed inter-arrival intervals.
+Table 3: Task sources used in the numerical experiments.
+Task type
+
+Dataset
+
+Pool size
+
+PROGRAMMING
+QA
+SUMMARIZATION
+TRANSLATION
+TOOL_USE
+
+MBPP [5]
+TriviaQA [13] unfiltered dev
+XSum [18] test
+OPUS-100 [21] en–fr test
+Hermes-FC [19] train
+
+974
+11 322
+11 334
+2 000
+1 893
+
+Each agent is represented by a task-dependent latency, capability,
+and semantic profile. The baseline latency and maximum output
+length are summarized in Table 4.
+
+Agent
+llama3-8b
+mistral-7b
+qwen2.5-72b
+qwen2.5-tooluse
+deepseek-coder
+
+Baseline latency (s)
+
+Maximum tokens
+
+1.5 ± 0.4
+2.0 ± 0.5
+2.0 ± 0.5
+2.5 ± 0.6
+2.5 ± 0.6
+
+80
+180
+300
+380
+512
+
+𝑎
+
+𝑏
+
+𝛽 max
+
+A-SPSA
+SPSA
+KW
+ZO-PGD
+ZO-GT
+PD-2pt
+SP-GT
+
+0.10
+0.70
+1.00
+0.50
+0.10
+0.05
+0.10
+
+0.30
+0.05
+0.30
+0.10
+0.30
+0.10
+0.30
+
+0.30
+—
+—
+—
+—
+—
+—
+
+For task 𝑇𝑖 assigned to agent 𝐸𝑘 , the service time is generated as
+
+
+real
+sem 
+𝑝𝑖𝑘
+= 𝜏𝑘 (type𝑖 ) 1 + 0.07ℎ𝑖 1 + 0.10 log 𝑛𝑖 1 + 0.12𝑑𝑖𝑘
+𝜀𝑖𝑘 ,
+sem is semantic miswhere ℎ𝑖 is task complexity, 𝑛𝑖 is request size, 𝑑𝑖𝑘
+match, and 𝜀𝑖𝑘 follows a log-normal distribution with parameters
+(0, 0.16). With probability 0.08, the result is additionally multiplied
+by a random factor sampled uniformly from [1.25, 1.9].
+The task-success probability depends on task-type capability,
+semantic match, task complexity, waiting time, and urgency, with
+an additional Gaussian perturbation. Agent profiles are calibrated so
+that faster agents have smaller output budgets and lower expected
+success probabilities.
+
+B.2
+
+Hyperparameter Selection
+
+Hyperparameters are selected independently for each method on
+a validation stream that does not overlap with the test runs. The
+validation stream contains 100 tasks. The search considers 𝑎 ∈
+{0.05, 0.1, 0.2, 0.5, 0.7, 1.0} and 𝑏 ∈ {0.05, 0.1, 0.2, 0.3}. For A-SPSA,
+the search additionally includes 𝛽 max ∈ {0.3, 0.5, 0.7}. The configuration maximizing validation Success Rate is fixed before the main
+evaluation. The resulting values are reported in Table 5.
+
+B.3
+Table 4: Agent profiles used in the numerical experiments.
+
+Method
+
+Numerical Adaptation Trajectories
+
+Figure 5 shows the evolution of Routing Objective, Deadline Hit
+Rate, and Success Rate over 𝑁 = 800 tasks for seeds {11, 42, 123}.
+The curves report rolling means with a window of 30 tasks, while
+shaded regions indicate one standard deviation.
+The methods exhibit similar short-term fluctuations because
+they process the same task streams. Over longer intervals, A-SPSA
+generally remains in the upper part of the comparison group and
+recovers after local performance drops, whereas SP-GT and, on
+some intervals, KW exhibit prolonged degradation. These per-seed
+
+Eval. & Trustworthiness of Agentic AI @ KDD’26, August 9, 2026, Jeju, Republic of Korea
+
+K. Chernikov, E. Tarasova, and O. Granichin
+
+Figure 6: Supplementary real-LLM adaptation trajectories. Curves show rolling means with a window of 30 tasks; shaded
+regions show one standard deviation over seeds {11, 42}.
+trajectories provide the temporal view underlying the aggregate
+summary in Figure 1: rather than reporting only a single terminal
+value, they show how each method’s Routing Objective, Deadline
+Hit Rate, and Success Rate evolve as the rolling window accumulates observations. The relative ordering of methods visible here is
+consistent with the seed-aggregated ranking reported in Section 5.1.
+
+B.4
+
+Additional Real-LLM Results
+
+During pre-collection, each of the 200 tasks is submitted to all five
+Groq endpoints, producing 200 × 5 cached task–agent outcomes per
+task stream. Each cached record includes the generated response
+
+and judge-based quality score. During replay, latency is sampled
+from the corresponding controlled agent profile.
+Figure 6 reports the supplementary Routing Objective and Wait
+MSE trajectories. Together with Figure 4, they illustrate the initial
+A-SPSA adaptation transient and its subsequent recovery.
+Taken together with Figure 4 in the main text, these supplementary trajectories indicate that A-SPSA’s numerical-simulation
+advantage extends to real generated content: after the initial adaptation transient, Routing Objective and Wait MSE stabilize in the
+same relative ordering observed in Table 2, suggesting that the
+method’s behavior in Section 5.4 is not an artifact of the synthetic
+agent profiles used in the numerical evaluation.
+
+

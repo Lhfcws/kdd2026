@@ -1,0 +1,3559 @@
+When Consensus Is Not Correctness: Diversity Collapse and
+Manufactured Overconfidence in Multi-Agent LLM Debate
+Chengxiao Dai
+School of Computer Science
+The University of Sydney
+Sydney, New South Wales, Australia
+chengxiao.dai@sydney.edu.au
+
+Abstract
+
+the agents agree the answer is more likely correct, so agreement
+can serve both as a confidence signal and as a stopping criterion
+(“debate until consensus”). The same equation of consensus with
+confidence runs well beyond debate, underwriting self-consistency
+decoding, majority voting, and the use of one model to judge another. This paper argues, theoretically and empirically, that the
+intuition is backwards in an important, predictable regime. Debate
+does reliably produce agreement; but that agreement is endogenous
+to the protocol, manufactured by the very interaction whose output
+it is taken to certify, so it cannot serve as a calibrated correctness
+signal. Read as confidence, it manufactures overconfidence (Figure 1). The lesson is a single principle: self-produced agreement
+cannot certify its producer; agreement is a channel for proposing
+answers, not for certifying them.
+Consider three agents answering a hard question. After one or
+two turns they typically converge on a shared answer and report
+high confidence. The tempting read is to trust the panel: an operator,
+or an automated gate, watching only the transcript, sees a confident
+and unanimous verdict and ships the answer. But unanimity among
+models that have read each other’s arguments is thin evidence,
+since the agents may have assimilated rather than verified. What
+makes this dangerous is not the error itself but the confidence
+attached to it: an answer marked uncertain invites a second look,
+whereas a confidently wrong consensus passes silently through
+the very gates meant to catch it. We show that on tasks where the
+model is fundamentally uncertain the agents converge anyway, to
+a confident wrong consensus. The signal an operator most wants
+to trust is thus least reliable exactly where the task is hardest.
+The mechanism is a variance effect made precise by a classical
+identity. Treat each agent’s turn-𝑡 output as a noisy correctness
+estimate 𝑋𝑖 (𝑡) with per-agent variance 𝜎 2 (𝑡) and inter-agent correlation 𝜌 (𝑡). The team’s aggregate obeys the classical equicorrelation
+identity [8]
+
+Multi-agent LLM debate is widely believed to improve answers,
+and inter-agent agreement is routinely read as evidence that an
+answer is trustworthy. We show this reading is unsafe: agreement
+is endogenous to the debate that produces it, so the interaction
+that manufactures consensus simultaneously strips it of evidence
+about correctness. A simple variance theory makes this precise. As
+agents read one another, the inter-agent correlation rises toward
+one (a diversity collapse), and that single correlation governs both
+the panel’s true error and the disagreement an operator reads as
+confidence, driving them in opposite directions: the ensemble stops
+averaging out error exactly as it stops looking uncertain. Three
+consequences follow: the panel’s apparent confidence saturates
+independently of the error; the calibration gap therefore tracks the
+residual error, so debate manufactures the most overconfidence
+exactly where the model is most wrong; and whether debate is
+benign is a race between error-correction and confidence-inflation,
+set by role design and task headroom. This motivates a certificationfirst remedy, Calibrated Multi-Agent Debate: two conditional, modeldependent fixes (Prevent, Detect) plus a split-conformal certificate
+(Certify) that, under exchangeability, holds coverage regardless of
+collapse. By contrast, agreement-based stopping commits confident
+errors at 18–47% miscoverage. A controlled study over fifteen tasks,
+replicated across five model families and extended to free-form
+generation, confirms each prediction: the gap’s residual-tracking
+is empirically affine with a sub-unit slope (0.82, 𝑅 2 = 0.96), and a
+single shared constant predicts per-condition calibration gaps out
+of sample.
+
+CCS Concepts
+• Computing methodologies → Natural language processing;
+Multi-agent systems; • Mathematics of computing → Probabilistic inference problems.
+
+
+𝜎 2 (𝑡) 
+1 + (𝑁 − 1)𝜌 (𝑡) .
+(1)
+𝑁
+Reading each other’s outputs makes the agents assimilate (a consensus dynamic long studied in networked multi-agent systems [34]),
+so 𝜌 (𝑡) rises toward 1, a diversity collapse. As 𝜌 (𝑡) → 1, the bracket
+→ 𝑁 and the 1/𝑁 averaging benefit vanishes: the ensemble no
+longer reduces error, even though the observed disagreement among
+agents, which an external reader (or the agents themselves) uses to
+gauge certainty, goes to zero. Apparent certainty thus rises while
+real error does not. A single correlation 𝜌 (𝑡) drives both quantities in opposite directions. The ensemble literature [3, 28] reads
+𝜌 only through aggregate accuracy; but the same 𝜌 also governs
+the dispersion an operator reads as confidence, so as it climbs the
+Var( 𝜇ˆ𝑡 ) =
+
+Keywords
+large language models, multi-agent LLM debate, multi-agent systems, calibration, model evaluation, trustworthy AI
+
+1
+
+Introduction
+
+Multi-agent large language model (LLM) debate [11, 20, 30] runs
+several model instances over multiple turns and aggregates their
+answers, and is embedded in agentic pipelines where the panel’s
+apparent confidence gates downstream action: whether to answer,
+abstain, or escalate. A pervasive intuition, inherited from human deliberation and from ensemble learning [10, 18, 26, 29], is that when
+1
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+panel looks most unanimous exactly as its averaging stops working.
+We call this gap manufactured overconfidence. Made quantitative,
+the prediction is sharp: the gap equals the model’s residual error
+in the collapse limit and tracks it monotonically short of the limit,
+so the overconfidence is largest exactly where the model is least
+accurate. Debate is not uniformly harmful, though: error-correction
+can lower the residual even as confidence inflates, so whether a
+panel ends calibrated or overconfident is a race between the two,
+set by the roles the agents play and the headroom the task leaves.
+Inter-agent agreement is therefore not a safe correctness signal;
+the failure is structural, yet the resulting overconfidence is preventable, detectable, and certifiable. The stance is certification-first:
+an endogenous signal cannot be repaired by better calibration, since
+the calibration is itself read from the same collapsing interaction,
+so safety has to come from a quantity computed outside that loop.
+
+that homogeneous agents converge toward near-identical outputs
+(a semantic collapse) over repeated interaction; Liang et al. [31]
+document a degeneration of thought in which an agent, once confident, stops producing novel arguments; and Yang et al. [51] argue,
+information-theoretically, that output diversity, not agent or turn
+count, is what sustains gains. These observations share a mechanism the classical ensemble-variance literature already names: the
+equicorrelation identity (1) is standard [8], as is the bias–variance–
+covariance decomposition of ensemble error [45], with correlated
+members weakening the variance-reduction benefit of averaging.
+We make this lens load-bearing for debate in two steps: by treating
+the correlation as time-varying and assimilative, so “diversity collapse” is exactly 𝜌 (𝑡) → 1, and, crucially, by linking the same 𝜌 (𝑡)
+that governs Var( 𝜇ˆ𝑡 ) to the score dispersion E[𝑆 2 (𝑡)] (Lemma 3.2),
+whose collapse an operator reads, through the panel’s apparent
+agreement, as rising confidence. The opposite limits of these two
+quantities as 𝜌 → 1 are the source of the overconfidence, and we
+trace the consequence not for accuracy but for calibration, predicting a residual-tracking signature whose magnitude we validate
+empirically (Theorem 4.3).
+
+We make three key contributions.
+▶ Manufactured overconfidence in debate. We demonstrate that multi-agent debate manufactures overconfidence:
+confidence saturates while accuracy varies, so the calibration
+gap tracks the residual error and is worst where the model is
+least accurate. This holds across fifteen tasks, two roles, five
+model families, and free-form generation, and is not cured
+by adding agents (Section 7; Appendix F).
+▶ A variance theory of diversity collapse. We trace it to
+a diversity collapse: as agents read one another the interagent correlation rises toward one, driving true error and
+observed agreement in opposite directions. Confidence then
+saturates independently of the error, the gap tracks the residual, and a role-and-headroom race sets the calibrated-versusoverconfident outcome (Theorems 4.1, 4.3, 4.5); terminal
+confidence loses its dynamic range (Corollary 4.2), while one
+shared constant predicts each condition’s gap out of sample
+(Section 4; Appendix B.4).
+▶ A certification-first framework. We develop Calibrated
+Multi-Agent Debate (CMAD), an endogeneity-to-exogeneity
+ladder: Prevent hides peers’ verdicts; Detect scores the consensus trajectory for selective prediction [15]; Certify replaces agreement with a split-conformal set. Only Certify
+is unconditional, holding coverage ≥ 1 − 𝛼 regardless of
+collapse under only exchangeability and bounding the confident errors agreement-stopping commits; the first two are
+conditional, model-dependent levers (Section 5; Appendix C).
+The variance identity (1) is classical and split-conformal prediction [1, 46] is established; what is new is the overconfidence theory built on the collapse of (1), its quantitative match to data, the
+trajectory-trust corollary that operationalizes Detect, and Affirm’s
+coupling of conformal coverage with a collapse-aware stopping
+rule.
+
+2
+
+Confidence, calibration, and agreement as a signal. Language
+models are frequently miscalibrated and overconfident [17, 27, 33,
+36, 43, 50], and recent work surveys and empirically benchmarks
+the confidence-estimation and uncertainty-quantification methods proposed in response [16, 23]. Against this backdrop, a widespread heuristic reads inter-sample or inter-agent agreement (selfconsistency, majority vote, “debate until consensus”) as a confidence
+proxy [48], implicitly assuming that agreement tracks correctness.
+The same self-produced-signal assumption underlies LLM-as-judge
+evaluation [53] and self-verification, where, consistent with our
+diagnosis, LLMs are found unable to reliably self-correct reasoning
+without external feedback [22]. That assumption is exactly what
+our analysis overturns (Theorems 4.1–4.3): under diversity collapse
+the agreement proxy is not merely noisy but systematically overconfident, with a closed-form bias that tracks the residual error, so
+it is least reliable on exactly the hardest inputs, where it is most
+relied upon.
+Stopping rules and conformal certification. A line of work decides
+when to stop debating: Hu et al. [21] detect distributional stability of
+the answer sequence; Chang and Chang [5] provide budget-aware
+termination with multiple gating signals; Eo et al. [13] debate only
+when single-model confidence is low; and Fan et al. [14] learn a
+binary trigger for when debate is worthwhile. These rules monitor
+some form of convergence or self-reported confidence, the very
+signals our theory flags as corrupted. Conformal prediction offers
+an exogenous alternative: split conformal gives distribution-free,
+finite-sample coverage under exchangeability [1, 46], with adaptive multiclass set constructions [2, 40], anytime-valid extensions
+via test martingales [39], and weighted variants under covariate
+shift [44]. In the LLM setting, Wang et al. [47] attach a conformal layer as a post-hoc act-versus-escalate gate and Zhou et al.
+[55] allocate error budgets across turns. We put the same coverage
+machinery to a different conceptual use: an explicit replacement
+for the agreement signal the theory shows is unsafe, coupled to a
+collapse-aware stopping rule whose marginal coverage provably
+survives diversity collapse (Theorems 5.4–5.5). Affirm thus stops on
+
+Related Work
+
+Multi-agent debate and the ensemble-variance lens. Du et al. [11]
+introduced iterative multi-agent debate, and frameworks such as
+CAMEL [30], MetaGPT [20], and ChatEval [4] scaled role-structured
+collaboration. A second wave tempered the optimism: Wynn et al.
+[49] and Smit et al. [41] find regimes where debate does not reliably beat a single model or self-consistency; Kong et al. [25] show
+2
+
+When Consensus Is Not Correctness
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Initial diversity
+
+Diversity collapse
+
+Debate interaction
+
+Agents' internal estimates
+
+Estimates become correlated
+
+Information
+exchange
+
+True value
+
+Aggregate looks certain
+
+Consensus
+
+1
+2
+
+2
+
+2
+
+3
+
+3
+
+potential
+error
+
+N
+
+Low
+
+Gap
+(manufactured
+overconfidence)
+G 𝑇 = 𝐶𝑇 − A 𝑇
+
+N
+
+3
+
+High
+
+Low
+
+Confidence
+𝐶𝑇 ≈ 1
+
+Very small
+observed
+variance Var
+(𝜇ෝt )
+
+…
+
+…
+N
+
+But accuracy is not perfect
+1
+
+True
+value Consensus
+
+1
+1
+
+Residual error
+remains
+
+Spurious certainty
+
+(late turn T)
+
+High
+
+High
+
+Low
+
+0
+
+Accuracy
+A𝑇
+
+𝐸𝑠𝑡𝑖𝑚𝑎𝑡𝑒 𝑜𝑓 𝑐𝑜𝑟𝑟𝑒𝑐𝑡𝑛𝑒𝑠𝑠 𝜇
+ෞ0
+
+(including answers/confidence)
+
+𝐸𝑠𝑡𝑖𝑚𝑎𝑡𝑒 𝑜𝑓 𝑐𝑜𝑟𝑟𝑒𝑐𝑡𝑛𝑒𝑠𝑠 𝜇ෝt
+
+Aggregate estimate 𝜇ෝt
+
+Agents hold diverse,
+weakly correlated views.
+
+Agents observe each other’s
+messages and update beliefs.
+
+Inter-agent correlation 𝜌 𝑡 ↑→ 1
+Observed disagreement 𝑆 2 𝑡 ↓→ 0
+
+Agreement 𝜅 𝑇 ↑→ 1
+Reported confidence 𝐶𝑇 ≈ 1
+
+Terminal gap persists:
+𝐺𝑇 ≈ 𝑅∞ − 𝜀 > 0
+
+A. Why correlation makes
+agreement deceptive
+
+B. Variance decomposition
+(identity)
+
+C. Residual-tracking law
+(from theory)
+
+D. Rank-uninformative
+terminal signal (Corollary)
+
+E. Safety implication
+
+𝜎2 𝑡
+1+ 𝑁−1 𝜌 𝑡
+𝑁
+
+𝐺𝑇 = 𝐶𝑇 − 𝐴 𝑇 ≈ 𝑅∞ − 𝜀
+
+Var 𝜇ෝ𝑡 =
+
+Debate drives p(t) up. observed
+disagreement shrinks even when
+agents remain wrong.
+
+As 𝜌 𝑡 , aggregate variance
+→ 𝜎 2 𝑡 (single-agent level),
+not 0.
+
+𝑅∞​= 1 − 𝐴∞ : residual error after
+full collapse
+𝜀 ≈ 0 : small estimation error
+
+Over confidence tracks the
+residual error left on the table.
+
+2
+
+2
+
+M
+
+By
+confidence
+(at turn T)
+
+Agreement stopping trusts an
+inflated signal (𝜅, C), so error not
+controlled.
+
+…
+
+𝜎 2 𝑡 : average within-agent variance
+𝜌 𝑡 : average inter-agent correlation
+
+1
+
+…
+
+N : number of agents
+
+By
+1
+accuracy
+
+~random permutation
+
+M
+
+Terminal confidence is essentially
+independent of correctness
+ranking.
+
+Only distribution-free certification
+(e.g., conformal sets) guarantees
+error control.
+
+Figure 1: Mechanism overview. How debate converts rising inter-agent correlation 𝜌 (𝑡) (top row) into a saturated agreement
+signal and a terminal calibration gap, with the bottom-row panels labeling the steps: agreement under correlation (A), the
+variance identity (1) (B), the residual-tracking law (C), the terminal rank signal (D), and the certification implication (E).
+confidences (for instance the answer consensus 𝜅 (𝑡), the fraction on
+the modal answer), maximal (𝐶e = 1) at unanimity. Under collapse
+(Assumption 1) both 𝑆 2 (𝑡) and the observed disagreement vanish,
+so the saturation we prove via 𝑆 2 holds for the apparent confidence
+𝐶e(𝑡); the reported confidence 𝐶 (𝑡) co-saturates (Theorem 4.1 and
+the remark following it).
+
+a coverage-validated quantity (set size) rather than on convergence,
+with a strict, quantified safety separation from agreement-based
+stopping (Corollary 5.6).
+
+3
+
+Preliminaries
+
+A debate runs 𝑁 agents with fixed role prompts over 𝑇 turns; at
+turn 𝑡 agent 𝑖 emits an answer 𝑦ˆ𝑖 (𝑡) ∈ Y (for multiple choice,
+Y = {1, . . . , 𝐾 }) and a self-reported confidence 𝑐𝑖 (𝑡) ∈ [0, 1], conditioning on the transcript through turn 𝑡 − 1, with gold label 𝑦.
+Instances are i.i.d. from a distribution P, and all per-turn quantities below are population objects we estimate by Monte Carlo
+(Section 7). Exchangeable agents justify the single scalar equicorrelation 𝜌 (𝑡); the heterogeneous-covariance case holds verbatim and
+is deferred to Appendix B.10.
+
+Lemma 3.2 (The collapse-dynamics identity). Under Definition 3.1 with equicorrelation 𝜌 (𝑡),
+
+𝜎 2 (𝑡) 
+1 + (𝑁 − 1)𝜌 (𝑡) ,
+𝑁
+ 2  𝑁 −1 2
+
+E 𝑆 (𝑡) =
+𝜎 (𝑡) 1 − 𝜌 (𝑡) .
+𝑁
+Var( 𝜇ˆ𝑡 ) =
+
+(2)
+
+As 𝜌 (𝑡) → 1 these move in opposite directions: Var( 𝜇ˆ𝑡 ) → 𝜎 2 (𝑡)
+(the averaging benefit is lost, so error persists) while E[𝑆 2 (𝑡)] → 0
+(the agents look unanimous). That divergence is the source of the
+manufactured overconfidence. Proof in Appendix B.1.
+
+Definition 3.1 (Correctness score and observable agreement). For
+the variance analysis we use a per-agent correctness score 𝑋𝑖 (𝑡) =
+𝜙 (𝑦ˆ𝑖 (𝑡), 𝑐𝑖 (𝑡)) ∈ [0, 1], equal to 𝑐𝑖 (𝑡) if 𝑦ˆ𝑖 (𝑡) = 𝑦 and 1 − 𝑐𝑖 (𝑡)
+otherwise; it needs the gold label 𝑦 and enters only the proofs.
+From it we form 𝜎 2 (𝑡) = Var(𝑋𝑖 (𝑡)), the equicorrelation 𝜌 (𝑡) =
+Í
+Corr(𝑋𝑖 (𝑡), 𝑋 𝑗 (𝑡)), the aggregate 𝜇ˆ𝑡 = 𝑁1 𝑖 𝑋𝑖 (𝑡), and the disperÍ
+sion 𝑆 2 (𝑡) = 𝑁1 𝑖 (𝑋𝑖 (𝑡) − 𝜇ˆ𝑡 ) 2 . Two confidence signals run alongside. The agents report confidence directly: the panel’s reported
+Í
+confidence 𝐶 (𝑡) = 𝑁1 𝑖 𝑐𝑖 (𝑡) is the mean verbalized confidence,
+and is the quantity that enters the calibration gap and every empirical measurement (Section 7). What an operator instead reads
+at deployment is label-free: an apparent confidence 𝐶e(𝑡), a continuous statistic of the agents’ observed agreement on answers and
+
+Assumption 1 (Diversity collapse). Debate is assimilative: 𝜌 (𝑡)
+rises over the horizon toward a limit 𝜌 ∞ , and the per-agent vari2 ). Both the latent dispersion
+ance is bounded (0 < 𝜎 2 (𝑡) ≤ 𝜎max
+2
+E[𝑆 (𝑡)] and the agents’ observed disagreement on answers and
+confidences decrease over the horizon and vanish as 𝜌 ∞ → 1, so apparent confidence rises to its ceiling. The debate collapses if 𝜌 ∞ = 1.
+The equicorrelation form is a convenience, not load-bearing: Appendix B.10 shows the same collapse and all of Theorems 4.1–4.3
+hold for an arbitrary inter-agent covariance. We verify 𝜌 ∞ ≈ 1
+empirically across all conditions (Section 7, Figure 2).
+3
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+4
+
+Dai
+
+A Variance Theory of Debate Overconfidence
+
+at which consensus formed, where 𝜌 (𝑡) < 1 and the dispersion still
+carries information.
+
+We track, as the debate runs, the accuracy 𝐴(𝑡) = P(𝑦ˆagg (𝑡) = 𝑦) of
+the aggregated decision, where 𝑦ˆagg (𝑡) is the modal (majority-vote)
+answer among the agents’ 𝑦ˆ𝑖 (𝑡), together with the two confidence
+signals of Definition 3.1: the apparent confidence 𝐶e(𝑡) that the
+variance mechanism drives, and the reported confidence 𝐶 (𝑡) that
+the experiments measure. The loss ℓ (𝑡) = 1 − 𝐴(𝑡) decomposes into
+a reducible part (noise that debate can average down, or error that
+critique can fix) and an irreducible residual 𝑅∞ = lim𝑡 ℓ (𝑡), the error
+the debate process cannot remove, such as a shared misconception
+or genuine task ambiguity. The calibration gap 𝐺 (𝑡) = 𝐶 (𝑡) − 𝐴(𝑡)
+is the amount by which the reported confidence exceeds accuracy;
+its label-free analogue 𝐶e(𝑡) − 𝐴(𝑡) is what an operator reading
+agreement would see.
+
+4.1
+
+Corollary 4.2 grounds the Detect component (Section 5.2): the usable
+confidence signal loses its dynamic range precisely at the turn an
+operator reads it, so any remaining rank signal can only live in
+the vanishing shortfall, empirically near chance on the hard tasks
+(within-task AUROC 0.49–0.58; Section 7), and survives instead in
+how the consensus was reached, where the consensus-speed signal
+retains discrimination. Proof in Appendix B.3.
+
+4.2
+
+The overconfidence gap tracks the residual
+error
+
+Once confidence has saturated, the calibration gap can no longer
+reflect how often the panel is right; what remains is the one error
+collapse cannot average away, the irreducible residual.
+
+Confidence saturates independently of
+correctness
+
+Collapse drives the agents’ observed disagreement to zero, so any
+confidence read from it rises to its ceiling regardless of the panel’s
+accuracy.
+
+Theorem 4.3 (Overconfidence tracks the residual error).
+Let 𝐶 ∞ = lim𝑡 𝐶 (𝑡) and 𝐴∞ = lim𝑡 𝐴(𝑡) = 1 − 𝑅∞ . Then the terminal
+calibration gap is
+
+Theorem 4.1 (Confidence saturation under collapse). Un2
+der Assumption 1 with 𝜌 ∞ = 1 and 𝜎 2 (𝑡) ≤ 𝜎max
+< ∞, the dispersion
+vanishes, E[𝑆 2 (𝑡)] → 0; the observed disagreement also vanishes
+in this collapse limit by Assumption 1, so the apparent (agreementbased) confidence 𝐶e(𝑡) of Definition 3.1 satisfies 𝐶e(𝑡) → 1. The limit
+is independent of correctness: it is the same whether the residual error
+𝑅∞ is zero or close to one.
+
+𝐺 ∞ = 𝐶 ∞ − 𝐴∞ = 𝑅∞ − (1 − 𝐶 ∞ ).
+
+(3)
+
+In the collapse limit the reported confidence co-saturates (Theorem 4.1
+and the remark following it, 𝐶 ∞ → 1), giving 𝐺 ∞ = 𝑅∞ : the manufactured overconfidence then equals the model’s residual error. More
+generally, if confidence saturates to 𝐶 ∞ = 1 − 𝜀 (with shortfall 𝜀 ≥ 0
+possibly depending weakly on the task), then 𝐺 ∞ = 𝑅∞ −𝜀, which, provided the shortfall grows no faster than the residual (0 ≤ d𝜀/d𝑅∞ < 1),
+is strictly increasing in 𝑅∞ : the gap tracks the residual monotonically.
+When 𝜀 is constant or affine in 𝑅∞ the relation is itself affine, with
+slope 1 − d𝜀/d𝑅∞ ∈ (0, 1] (unit slope at constant 𝜀); that slope is an
+empirical quantity (Section 7).
+
+The proof (Appendix B.2) is immediate from Lemma 3.2: E[𝑆 2 (𝑡)] =
+𝑁 −1 2
+𝑁 𝜎 (𝑡) (1 − 𝜌 (𝑡)) → 0, and by Assumption 1 the observed agreement saturates as 𝜌 (𝑡) → 1, so continuity at unanimity gives
+𝐶e(𝑡) → 1. The signal a reader uses to judge certainty is thus driven
+entirely by 𝜌 (𝑡), which debate inflates, so the saturated signal cannot identify the bias.
+Reported confidence co-saturates. The theorem governs the apparent
+confidence 𝐶e(𝑡), a statistic of agreement. The reported confidence
+Í
+𝐶 (𝑡) = 𝑁1 𝑖 𝑐𝑖 (𝑡) that the experiments measure obeys the same dynamics by Assumption 1: as the agents’ verbalized confidences concentrate, 𝐶 (𝑡) rises to a ceiling 𝐶 ∞ = 1 − 𝜀. The apparent confidence
+reaches the ideal ceiling exactly (𝜀 = 0); the reported confidence
+empirically stops just short, with a small, near-constant shortfall
+𝜀 ≈ 0.037 (Section 7). The calibration gaps below are stated for this
+reported 𝐶 (𝑡), the operative empirical quantity, with 𝜀 measuring
+its distance from the apparent ceiling 1.
+
+Corollary 4.4 (Where debate is most dangerous). Under the
+condition of Theorem 4.3 (0 ≤ d𝜀/d𝑅∞ < 1), 𝐺 ∞ is increasing in 𝑅∞ :
+debate manufactures the most overconfidence precisely on the tasks
+where the model is least able to be right (hard or ambiguous tasks
+with large irreducible error) and essentially none on saturated tasks
+(𝑅∞ ≈ 0), regardless of role.
+The prediction is sharply falsifiable: plotting the terminal gap against
+the residual error 1 − 𝐴(𝑇 ) across tasks should yield a relation that
+increases monotonically with the residual, with local slope in (0, 1]
+(reaching unit slope only as the shortfall 𝜀 becomes constant under full saturation). The theory commits only to this monotone,
+residual-tracking shape, not to any functional form or slope; that
+the relation is empirically affine with a sub-unit slope (Section 7
+measures 0.82, 𝑅 2 = 0.96) is an empirical signature, not predicted.
+The identity 𝐺 ∞ = 𝑅∞ − 𝜀 (with 𝜀 = 1 − 𝐶 ∞ ) is algebraic; its empirical content is that the shortfall 𝜀 collapses to a near-constant
+(Theorem 4.1), which is what pins the gap to the residual. Proof in
+Appendix B.4. A finite-time refinement (Proposition B.1, Appendix B.5) bounds the apparent gap at every turn by the measurable
+collapse factor 1 − 𝜌 (𝑡), so the residual-tracking holds at the turn
+an operator reads the panel, not only in the limit.
+
+Corollary 4.2 (Terminal agreement loses its dynamic range
+under collapse). Fix a task. Under the collapse of Theorem 4.1
+the terminal confidence saturates toward a common ceiling on every instance of that task, so its across-instance variance vanishes,
+Var𝑥 [𝐶 ∞ (𝑥)] → 0, and its usable dynamic range collapses. At exact
+saturation (𝐶 ∞ constant in 𝑥) every (correct, incorrect) pair ties, so the
+correctness-ranking area under the ROC curve (AUROC) is exactly 12 ;
+near collapse any residual discrimination survives only in the vanishing shortfall 𝜀 (𝑥) = 1 − 𝐶 ∞ (𝑥), which collapse does not by itself
+drive to chance. A label-free signal that reliably discriminates must
+instead come from the trajectory before collapse, for instance the rate
+4
+
+When Consensus Is Not Correctness
+
+4.3
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Whether debate is benign depends on roles
+and task headroom
+
+Sequester withholds one salient route by which agents condition
+on each other (the visible verdict), targeting part of the coupling
+that drives 𝜌 (𝑡) → 1 (Lemma 3.2), but leaves reasoning, rhetoric,
+and role-induced deference intact, so its effect is empirical and
+conditional. Section 7 finds it real but confined to cooperative
+deepseek-v4-flash, with a counterfactual-answer probe ruling
+out the explanation that agents merely copy the visible answer.
+
+Because collapse is universal, what distinguishes benign debate
+from harmful debate is not whether agents converge but whether
+accuracy keeps up with the rising confidence.
+Theorem 4.5 (Productive–overconfident dichotomy). Over
+a horizon [1,𝑇 ] write Δ𝐶 = 𝐶 (𝑇 ) − 𝐶 (1) and Δ𝐴 = 𝐴(𝑇 ) − 𝐴(1).
+Under Assumption 1, Δ𝐶 ≥ 0 (confidence is inflated by the collapse).
+The change in the calibration gap is Δ𝐺 = Δ𝐶 − Δ𝐴, so
+Δ𝐺 < 0 (calibration improves) ⇐⇒ Δ𝐴 > Δ𝐶 ≥ 0,
+
+5.2
+
+(4)
+
+so debate improves calibration exactly when error-correction Δ𝐴 outpaces the (always nonnegative) confidence inflation Δ𝐶. Since Δ𝐶 > 0
+holds generically, the sign of Δ𝐺 is governed by the error-correction
+rate Δ𝐴, which is a property of the role design (do the roles critique
+or merely persuade?) and the task headroom (is there error left to
+correct?).
+
+Definition 5.2 (Deliberation-Speed Trust (Deliberation)). From a
+debate transcript (no test label) compute label-free trajectory features: the self-reported confidence and answer-consensus at the
+first and last turns, the number of turns the modal answer changes,
+the change in confidence, and the time to consensus (the feature
+the theory implicates), the first turn at which agreement crosses a
+threshold. The trust score 𝜏 (𝑥) ∈ [0, 1] is a logistic model of these
+features, fit on a labeled calibration set of other conditions to predict answer correctness. At deployment 𝜏 is computed from the
+transcript alone and used for selective prediction: commit when 𝜏
+is high, abstain or escalate when it is low.
+
+The criterion Δ𝐴 versus Δ𝐶 predicts a negative association between
+accuracy gain and the change in expected calibration error (ECE)
+across conditions; Section 7 finds 𝑟 (Δ𝐴, ΔECE) = −0.46. Three
+regimes follow: cooperative roles on tasks with headroom (Δ𝐴 large,
+productive); adversarial or persuasion roles (Δ𝐴 ≈ 0, overconfident);
+and ambiguous tasks where no role can raise accuracy (Δ𝐴 ≈ 0 for
+both, overconfident regardless of role, the maximal-danger case of
+Corollary 4.4). Proof in Appendix B.6.
+
+5
+
+Calibrated Multi-Agent Debate Framework
+
+Deliberation is a logistic head on seven label-free trajectory features. Its lift over self-reported confidence comes from the consensusdynamics block, not any single feature (an ablation in Section 7
+shows dropping any one feature moves AUROC by < 0.004), echoing Corollary 4.2. It is trained on labels, but for other conditions,
+so it transfers to unseen domains and to a second model of the
+same tier with no labels for the deployment condition. It helps
+where confidence has gone rank-uninformative and adds nothing
+on GLM-5.1, whose confidence still ranks correctness.
+
+The theory diagnoses an endogenous trust signal (Section 4), corrupted by collapse in proportion to how close it sits to the interaction it certifies. CMAD responds with three components that
+trust this signal progressively less: Prevent reduces the endogeneity
+at the protocol level, Detect reads it from the trajectory before it
+saturates, and Certify replaces it with an exogenous coverage guarantee. The theory routes between them: role design and headroom
+(Theorem 4.5) say when Prevent applies, Corollary 4.2 says when
+Detect is needed, and the certificate holds under exchangeability
+regardless of collapse (Theorem 5.4). Only the exogenous layer
+is collapse-unconditional: the two signal-based components are
+model-dependent (Section 7), and Proposition C.1 shows they can
+change only efficiency, never coverage.
+
+5.1
+
+Detect: Deliberation-Speed Trust
+
+When overconfidence cannot be prevented, it can still be detected
+at deployment without labels. Corollary 4.2 shows the terminal
+signal is useless under collapse but the pre-collapse trajectory survives, and names the most informative feature: a consensus reached
+slowly, after the panel has been argued into it, reflects assimilation
+under pressure, whereas one reached immediately reflects genuine
+agreement (verified in Section 7).
+
+5.3
+
+Certify: Conformal Verdict Affirmation
+
+Certify wraps the committed answer in a distribution-free coverage
+guarantee (Affirm): it affirms that the true label lies in the returned
+set with probability ≥ 1 − 𝛼, not that any single answer is correct. It reads no internal signal, so the collapse that corrupts every
+agreement heuristic cannot invalidate its coverage.
+
+Prevent: Verdict-Sequestered Debate
+
+Prevent acts at the protocol level, on the most salient channel by
+which agents condition on one another’s answers.
+
+Definition 5.3 (Debate nonconformity). Fix a turn 𝑡. Pool the
+Í
+agents’ (and replicates’) votes into class scores 𝑝ˆ𝑘 (𝑡) = 𝑁1 𝑖 1[𝑦ˆ𝑖 (𝑡) =
+𝑘], and define the nonconformity of class 𝑘 as 𝑠𝑘 (𝑡) = 1 − 𝑝ˆ𝑘 (𝑡).
+Given a calibration set of 𝑛 labeled instances with true-label scores
+{𝑠 ( 𝑗( )𝑗 ) (𝑡)}𝑛𝑗=1 , let 𝑞ˆ𝛼 (𝑡) be the ⌈(𝑛 + 1)(1 − 𝛼)⌉/𝑛 empirical quantile.
+
+Definition 5.1 (Verdict-Sequestered Debate (Sequester)). Standard
+debate shows each agent the full text of its peers’ previous turns,
+including the committed line ANSWER: k; CONFIDENCE: c. VerdictSequestered Debate is the identical protocol with one change: before
+a peer’s message is shown to others, the committed answer/confidence line is withheld (replaced by a placeholder), so agents exchange reasoning but not their stated answers or confidences. Every
+agent still emits its own answer and confidence (which we score);
+only the peer-visible copy is redacted. Sequester is a one-line change
+to the message relay and adds no cost.
+
+𝑦
+
+b𝛼 (𝑡) = {𝑘 : 𝑠𝑘 (𝑡) ≤ 𝑞ˆ𝛼 (𝑡)}.
+The conformal set is C
+Theorem 5.4 (Marginal coverage, immune to collapse). If
+the calibration instances and the test instance are exchangeable, then
+
+b𝛼 (𝑡) ≥ 1 − 𝛼, irrespective of role design,
+for any fixed turn 𝑡, P 𝑦 ∈ C
+task, or the value of 𝜌 (𝑡). The guarantee uses only exchangeability of
+the nonconformity scores, never the (corrupted) agreement level.
+5
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+Theorem 5.4 is split conformal [46]; coverage holds even as 𝜌 (𝑡) →
+1 and 𝐶e(𝑡) → 1, so the conformal set is the one signal that survives
+diversity collapse. Proof in Appendix B.7.
+
+5.4
+
+the findings are not single-model artifacts we replicate on four further families (qwen-flash [37], GLM-5.1 [54], Llama-3.3-70B [12],
+GPT-4o-mini [35]) and one reasoning-tuned model (QwQ-plus [38]),
+and to probe generality beyond multiple choice we add ReClor [52],
+CommonsenseQA [42], and the free-form benchmarks GSM8K [7]
+and TriviaQA [24]. Exact API model strings, providers, decoding parameters, the confidence-elicitation format, and the answer-parsing
+rules are in Appendix D. Each agent logs its answer and confidence separately, so answer agreement is never computed from
+correctness; we report accuracy 𝐴𝑇 , mean confidence 𝐶𝑇 , the overconfidence gap 𝐺𝑇 = 𝐶𝑇 −𝐴𝑇 and residual 𝑅 = 1−𝐴𝑇 , the calibration
+change ΔECE, the mechanism signals 𝜅 (𝑡) and 𝜌 (𝑡), and, for the
+deployment components, selective-prediction AUROC and conformal miscoverage/set-size. The task list, role designs, per-domain 𝑄,
+and all metric definitions are in Appendix D.
+
+Certified stopping and the safety separation
+
+Affirm (Algorithm 1, Appendix C) stops at a turn 𝑡 ★ chosen on a
+selection fold, with the deployment threshold formed on an independent fold. Since 𝑡 ★ depends on neither the threshold fold nor
+the test point, the data-dependent stop keeps marginal coverage.
+Theorem 5.5 (Coverage at the calibration-selected stop).
+Suppose 𝑡 ★ is chosen using only the selection fold Dsel , and the thresh𝑞(𝑡 ★) is computed on an independent fold Dthr that is exchangeold ˆ
+able with the test instance. Then 𝑡 ★ is independent of Dthr and of the
+test point, so the fixed-turn guarantee (Theorem 5.4) applies verbatim
+at the now-fixed index 𝑡 ★:
+
+b𝛼 (𝑡 ★) ≥ 1 − 𝛼,
+P𝑦∈C
+(5)
+
+7
+
+with no Bonferroni penalty and no dependence on the agreement level
+or the diversity collapse.
+
+We test the paper’s two claims on one controlled grid (all thirty
+per-condition trajectories in Table 5). Diagnosis: diversity collapse
+drives the saturation and residual-tracking signatures, with a postcollapse shortfall so constant that one shared constant predicts
+each model’s per-condition gap out of sample. Treatment: the three
+CMAD components each clear the theory’s bar: Certify unconditionally, Prevent and Detect where their regime applies (robustness
+and four no-new-data re-analyses in Appendices D–F).
+
+Proof in Appendix B.8. Because the certificate reads no internal
+signal, augmenting the debate with any Prevent or Detect module
+changes only efficiency, never coverage (Proposition C.1, Appendix C).
+Against the standard agreement heuristic, the separation is provable.
+
+Diagnosis: confidence saturation under collapse. Across all thirty
+conditions consensus averages 𝜅¯ (𝑇 ) = 0.997 and confidence compresses into [0.90, 1.0] (mean 0.96) while accuracy spans [0.57, 0.99]:
+confidence saturates regardless of correctness (Figure 3, left; Theorem 4.1). The mechanism is measured directly: the inter-agent
+correlation rises from 𝜌¯ (1) = 0.53 to 𝜌¯ (𝑇 ) = 0.96 (all 30/30 conditions), the score dispersion E[𝑆 2 (𝑇 )] → 0, and the aggregate
+variance climbs toward the single-agent variance, losing the 1/𝑁
+benefit (Figure 2); the closed forms of Lemma 3.2 reproduce the
+curves to 1.4×10−5 , turning the assumption 𝜌 ∞ ≈ 1 into a measured
+fact.
+
+Corollary 5.6 (Safety separation from agreement-stopping). Let agreement-stopping return the modal answer once consensus 𝜅 (𝑡) ≥ 𝜃 . Under collapse (Assumption 1) the consensus threshold
+is reached, so agreement-stopping commits to a singleton whose miscoverage (probability the committed answer excludes 𝑦) is the residual
+rate 𝑅∞ (by definition of the residual). Affirm’s returned set has miscoverage ≤ 𝛼 at its calibration-selected stopping turn (Theorem 5.5).
+Hence
+err(agreement-stop) − err(Affirm) ≥ 𝑅∞ − 𝛼,
+
+(6)
+
+which is positive and as large as 𝑅∞ − 𝛼 (up to 1 − 𝛼): on hard
+or ambiguous tasks where 𝑅∞ ≫ 𝛼, agreement-stopping is much
+worse than its nominal confidence suggests, while Affirm stays at
+its guarantee. Equivalently, no agreement-only commit rule with a
+fixed consensus threshold 𝜃 < 1 attains miscoverage ≤ 𝛼 uniformly
+over the family of tasks with 𝑅∞ > 𝛼: under collapse no agreement
+threshold can be made uniformly safe, so a certificate, not a better
+threshold, is required.
+
+Gap–residual tracking. Regressing the terminal gap 𝐺𝑇 = 𝐶𝑇 −
+𝐴𝑇 on the residual 𝑅 ≈ 1 − 𝐴𝑇 across the thirty conditions gives
+slope 0.82 (CI [0.73, 0.88]), intercept −0.01, 𝑹 2 = 0.96: thirty points
+spanning residuals 0.01–0.43 fall on one line, with the largest gaps
+on the hardest tasks (Figure 3, center; Corollary 4.4). The sub-unit
+slope reflects the ceiling 𝐶 ∞ ≈ 0.96 exactly as Theorem 4.3 predicts:
+the central quantitative claim. A matched lone-agent control isolates
+the debate-specific part: self-critique inflates confidence by +0.039
+on flat-accuracy domains against debate’s +0.088, so roughly half
+of the inflation is reproduced by a lone agent and the remainder,
+plus the consensus collapse a lone agent cannot produce, is specific
+to debate (Appendix E).
+
+Agreement-stopping trusts exactly the quantity the theory shows
+is inflated (𝜅, e
+𝐶), and the gap between the two procedures is the
+residual error 𝑅∞ , the same quantity that equals the manufactured
+overconfidence (Theorem 4.3). Proof in Appendix B.9.
+
+6
+
+Results
+
+Experimental Setup
+
+A shared constant and the productivity dichotomy. A high 𝑅 2 is
+partly structural (since 𝐺𝑇 and 𝑅 share 𝐴𝑇 ); the non-mechanical
+content is that confidence is nearly flat across tasks (Var(𝐶𝑇 ) is
+17× smaller than Var(𝐴𝑇 )). The parameter-free test: predicting
+b = 𝑅 − 𝜀¯ from a single shared constant 𝜀¯ = 0.037 achieves lower
+𝐺
+out-of-sample error than the fitted relation (RMSE 0.010 vs. 0.022
+
+Our primary model is deepseek-v4-flash [9] (non-thinking; 𝑁 =3
+agents, 𝑇 =8 turns, 𝐵=3 replicates). The core benchmark is a controlled 15 × 2 grid: fifteen multiple-choice tasks (thirteen difficultyspanning MMLU domains [19], TruthfulQA [32], and ARC-Challenge
+[6]) each run under cooperative (critique) and adversarial (persuade)
+roles on the same questions, giving thirty conditions. To check
+6
+
+When Consensus Is Not Correctness
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+0.200
+
+ρ̄ : 0.53 → 0.96
+
+0.8
+0.6
+0.4
+
+formal logic
+prof. law
+virology
+mean (30 cond.)
+
+0.2
+0.0
+
+aggregate variance Var(μ̂ t)
+
+0.035
+
+score dispersion [S 2(t)]
+
+inter-agent corr. ̂
+ρ(t)
+
+1.0
+
+0.030
+0.025
+0.020
+0.015
+0.010
+0.005
+0.000
+
+2
+
+4
+
+6
+
+a
+
+Var(μ̂ t)
+σ 2/N floor
+
+0.150
+0.125
+0.100
+0.075
+0.050
+0.025
+0.000
+
+8
+
+debate turn t
+
+0.175
+
+2
+
+4
+
+6
+
+8
+
+2
+
+debate turn t
+
+b
+
+4
+
+6
+
+8
+
+debate turn t
+
+c
+
+Figure 2: Inter-agent statistics over the debate horizon (deepseek-v4-flash; three representative cooperative conditions, dashed
+= mean over all thirty): the inter-agent score correlation 𝜌ˆ (𝑡) (left), the score dispersion E[𝑆 2 (𝑡)] (center), and the aggregate
+variance Var( 𝜇ˆ𝑡 ) against its 𝜎 2 (𝑡)/𝑁 floor (right).
+
+0.9
+
+0.8
+
+ct n
+rfe tio
+pe bra
+i
+l
+ca
+
+0.7
+
+accuracy spans 0.57−0.99
+
+0.6
+0.6
+
+a
+
+0.7
+
+0.8
+
+0.9
+
+final accuracy AT
+
+1.0
+
+0.3
+
+R 2 = 0.96, n = 30
+
+virology
+(hardest)
+
+0.2
+
+0.1
+
+cooperative
+adversarial
+OLS fit
+95% CI
+
+easy tasks
+GT ≈0
+
+0.0
+0.0
+
+b
+
+calibration
+worsens
+
+GT = 0.82 R − 0.01
+
+0.1
+
+0.2
+
+0.3
+
+calibration change ΔECE
+
+saturation band CT ∈[0.90, 1.0]
+
+overconfidence gap GT = CT − AT
+
+final confidence CT
+
+1.0
+
+0.1
+
+0.0
+
+−0.1
+calibration
+improves
+
+0.4
+
+residual error R = 1 − AT
+
+r = −0.46, p = 0.011
+
+−0.05 0.00
+
+c
+
+0.10
+
+0.20
+
+accuracy gain ΔA
+
+Figure 3: Per-condition scatter across thirty conditions (15 tasks × 2 roles; green cooperative, red adversarial): final confidence
+vs. accuracy (left), the overconfidence gap vs. residual error (center), and calibration change vs. accuracy gain (right).
+on qwen-flash, 0.024 vs. 0.034 on GLM-5.1), so one number suffices across three model families. Calibration improves only when
+accuracy does: ΔECE correlates negatively with Δ𝐴 (𝑟 = −0.46,
+𝑝 = 0.011; Figure 3, right), so cooperative roles with headroom
+self-correct while adversarial roles and ambiguous tasks degrade:
+the dichotomy of Theorem 4.5.
+
+only the certified family holds ≤ 𝛼, and Affirm does so while stopping earliest (1.4 vs. 7–8 turns; Theorem 5.5) and committing a
+singleton on 34% of inputs at 0.10 error, abstaining where it cannot
+commit safely (the full set on moral scenarios drives miscoverage
+to 0). This is the safety separation of Corollary 5.6 (per-domain
+Table 8, Appendix E).
+
+Certify: distribution-free coverage. With the diagnosis in hand
+we turn to the treatment, starting with the unconditional component. Agreement-based stopping commits the modal answer, so its
+miscoverage equals the residual (0.18–0.47 on hard domains across
+models), whereas Affirm holds marginal coverage ≥ 1 − 𝛼 (mean
+0.964/0.961 on deepseek-v4-flash/qwen-flash) because it never
+reads the collapsed agreement signal. Scored against a representative slate of the stopping literature on the same transcripts (Table 1),
+every rule reading agreement or confidence commits a confident
+wrong answer at the residual rate (miscov ≈ 0.22, ECE 0.15–0.17);
+
+Detect and Prevent: two conditional levers. The two signal-based
+components help where their regime applies. Detect (DeliberationSpeed Trust, Definition 5.2) reads how slowly the panel was argued
+into agreement: a label-free signal (instance correctness falls from
+0.94 at immediate consensus to 0.55 after seven turns). Deployed
+label-free it raises correctness-ranking AUROC over self-reported
+confidence from 0.756 to 0.793 on deepseek-v4-flash and 0.728
+to 0.770 transferred to qwen-flash (Table 2), with the largest gains
+where confidence has gone rank-uninformative (Corollary 4.2);
+on GLM-5.1, whose confidence still ranks, it correctly does not
+7
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+Table 1: Stopping rules compared (deepseek-v4-flash, the 16 hard conditions with 𝑅∞ > 𝛼 = 0.1, test split; cells are mean±SD
+over conditions).
+Rule
+
+miscov ↓
+
+fixed-𝑇
+agreement@0.9
+confidence@0.9
+stability@2
+
+0.22±0.09
+0.22±0.09
+0.22±0.09
+0.22±0.09
+
+single-model-trigger@0.9
+early-exit (no-change)
+
+0.22±0.09
+0.22±0.09
+
+conformal@𝑇 [47]
+MICP budget [55]
+Affirm (ours)
+
+0.03±0.05
+0.02±0.04
+0.05±0.06
+
+Error & calibration
+singl-err ↓
+ECE ↓
+A. Agreement / stability stopping
+0.22±0.09
+0.17±0.09
+0.22±0.09
+0.15±0.07
+0.22±0.09
+0.15±0.09
+0.22±0.09
+0.15±0.08
+B. Budget / trigger stopping
+0.22±0.09
+0.16±0.09
+0.22±0.09
+0.15±0.08
+C. Certified (reads no agreement)
+0.12±0.01
+0.10±0.00
+0.12±0.01
+0.10±0.05
+0.10±0.04
+0.08±0.04
+
+help. Prevent (Verdict-Sequestered Debate, Definition 5.1) withholds
+peers’ committed verdicts: on cooperative deepseek-v4-flash it
+cuts overconfidence at no accuracy cost (ΔECE = −0.046) but the
+gain is regime-dependent and vanishes on qwen-flash, so Prevent
+is a conditional regularizer (Appendix E).
+
+Efficiency
+turns ↓
+
+commit% ↑
+
+1.00±0.00
+1.00±0.00
+1.00±0.00
+1.00±0.00
+
+8.0±0.0
+2.4±0.6
+3.2±1.1
+2.1±0.1
+
+100%
+100%
+100%
+100%
+
+1.00±0.00
+1.00±0.00
+
+6.5±1.4
+2.1±0.1
+
+100%
+100%
+
+3.45±1.15
+3.64±0.96
+2.72±1.33
+
+8.0±0.0
+7.2±2.2
+1.4±0.9
+
+18%
+12%
+34%
+
+Case A is the mechanism in miniature: with no new evidence available the panel assimilates (the holdout capitulates at turn 5) to a
+unanimous wrong verdict whose confidence has risen to 0.92.
+Case B immediate consensus: the benign, reliable case
+# Q: as of 2020, what % of the world practices open defecation? C=9%
+(gold)
+turn 𝑡
+1
+2
+3
+4
+5
+6
+7
+8
+modal ans
+C
+C
+C
+C
+C
+C
+C
+C
+mean 𝐶𝑡
+.82
+.92
+.98
+.98
+1.00
+1.00
+1.00
+1.00
+
+Cross-family generality. Replicating the grid on four further families (Table 3) reproduces the mechanism everywhere: confidence saturates, the correlation collapses, and the gap is affine in the residual
+with sub-unit slope (0.96, 0.92, 0.84, 0.76 on qwen-flash, GLM-5.1,
+Llama-3.3-70B, GPT-4o-mini) while agreement-stopping is unsafe (miscoverage up to 0.50) and Affirm holds coverage (0.96–1.00,
+all ≥ 1 − 𝛼). The shortfall is quantitatively shared: 𝜀¯ = 0.037 recurs
+on Llama-3.3-70B, the one boundary being the more-calibrated
+GPT-4o-mini (¯𝜀 = 0.085). It is not specific to non-thinking models,
+multiple choice, or 𝑁 = 3: a reasoning model (QwQ-plus) saturates
+harder (𝐶𝑇 = 0.98, slope 0.92), it holds on new task types and
+free-form generation (the gap from ≈ 0.01 on GSM8K to 0.21 on
+TriviaQA, coverage held), and persists at 𝑁 ∈ {5, 7} (pooled slope
+0.85, Table 7). Sequester, by contrast, is regime-dependent, while
+the conformal guarantee holds on all five (Appendices E, F).
+
+7.1
+
+|C| ↓
+
+# => unanimous and correct from turn 1: the fast consensus Fig. 4 shows
+is 94% reliable
+
+Case B is the benign counterpart: unanimous and correct from the
+first turn, the fast consensus that Figure 4 shows is 94% reliable. A
+third trajectory, a Sequester (Prevent) repair, appears in Appendix E.
+
+8
+
+Discussion and Limitations
+
+Relation to known LLM overconfidence. That language models are
+overconfident is documented [17, 43]; our contribution is its mechanism and magnitude under debate. Theorem 4.3 predicts a falsifiable
+quantity (the terminal gap tracks the residual error, reaching it in
+the collapse limit) and explains why multi-agent aggregation, often
+proposed as a calibration fix, can instead amplify miscalibration:
+averaging helps only when members are conditionally independent, and debate destroys that independence by driving 𝜌 (𝑡) → 1.
+How much of the gap debate manufactures rather than surfaces is
+itself model-dependent: a matched lone-agent control attributes a
+debate-added gap of +0.06 to deepseek-v4-flash (concentrated
+on its hard cells), where debate manufactures fresh overconfidence,
+whereas qwen-flash is already overconfident at turn 1 (𝐺¯1 = 0.18)
+and debate mainly surfaces it (Appendix E); the residual-tracking
+gap holds in both regimes.
+
+Case studies
+
+The aggregate statistics play out, question by question, in the logged
+trajectories. Cases A and B below show two real deepseek-v4-flash
+debates, with every agent’s committed answer per turn and the
+panel’s mean confidence 𝐶𝑡 (the gold option in bold).
+Case A adversarial debate, global facts: a confident error is manufactured
+# Q: as of 2019, what % of French people say God is important in life?
+#
+A=11% B=31% (gold) C=51% D=71%
+turn 𝑡
+1
+2
+3
+4
+5
+6
+7
+8
+agent 1
+B
+B
+B
+B
+A
+A
+A
+A
+agent 2
+B
+A
+A
+A
+A
+A
+A
+A
+agent 3
+A
+A
+A
+A
+A
+A
+A
+A
+mean 𝐶𝑡
+.72
+.90
+.90
+.90
+.92
+.92
+.92
+.92
+
+Novelty. We build on a classical variance identity (1), but the
+contribution is not the ensemble effect renamed. (i) The same 𝜌
+that governs aggregate variance also governs the dispersion an
+operator reads as confidence, and as 𝜌 → 1 the two move in opposite directions (Lemma 3.2): consensus tightens precisely as the
+
+# => correct B leads at turn 1, but the panel is argued into A; conf
+.72 -> .92
+
+8
+
+When Consensus Is Not Correctness
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Table 2: Deliberation-Speed Trust (Detect) vs. self-reported confidence: correctness-ranking AUROC and selective accuracy at 70%
+coverage per deployment target, and the fraction of conditions Deliberation wins (CV=5-fold, LODO=leave-one-domain-out).
+Deployment target
+
+votes/turn
+
+deepseek (within, CV)
+qwen-flash (transfer)
+qwen-flash (transfer)
+GLM-5.1
+
+9
+9
+3
+3
+
+AUROC ↑
+conf
+Delib
+0.756
+0.793
+0.728
+0.770
+0.656
+0.714
+0.840
+0.807
+
+Acc@70% ↑
+conf
+Delib
+0.943
+0.952
+0.878
+0.910
+0.850
+0.879
+—
+—
+
+Delib. wins ↑
+14/19 (LODO)
+24/34
+27/34
+3/16
+
+Table 3: Per-model summary: the correlation rise 𝜌¯ (1→𝑇 ), the gap-vs-residual slope, 𝑅 2 , single-constant prediction error
+(const-RMSE), Affirm’s (Certify) marginal coverage, and the Sequester ΔECE (cooperative/adversarial); GLM-5.1, Llama-3.3-70B,
+and GPT-4o-mini use a 16-condition difficulty-spread subset and QwQ-plus an 8-condition cooperative-only subset.
+Model
+deepseek-v4-flash
+qwen-flash
+GLM-5.1
+Llama-3.3-70B
+GPT-4o-mini
+QwQ-plus
+
+𝝆¯ (1→𝑻 )
+0.53→0.96
+0.61→0.97
+0.65→0.94
+0.51→0.97
+0.55→0.88
+0.73→0.93
+
+slope
+0.82
+0.96
+0.92
+0.84
+0.76
+0.92
+
+Gap–residual relation
+𝑅2 ↑
+const-RMSE ↓
+0.96
+0.021
+1.00
+0.010
+0.99
+0.024
+0.89
+0.034
+0.76
+0.061
+0.99
+0.024
+
+Affirm cov ↑
+0.964
+0.961
+0.992
+1.00
+1.00
+1.00
+
+Sequester ΔECE
+coop ↓
+adv ↓
+−0.046
+−0.010
++0.010
+−0.011
+—
+—
+—
+—
+—
+—
+—
+—
+
+aggregate stops improving, so agreement becomes actively misleading. (ii) The non-trivial content is not the identity 𝐺 = 𝑅 − 𝜀
+but a measured fact: under debate the shortfall 𝜀 = 1 − 𝐶𝑇 collapses to a near-constant (across-condition SD ≤ 0.03), so a single
+shared constant predicts each primary model’s per-condition gaps
+to RMSE 0.01–0.021, achieving lower out-of-sample error than any
+task-fitted slope and even recurring on Llama-3.3-70B (𝜀 = 0.037):
+the empirical content of confidence saturation (Theorem 4.1), not
+algebra. (iii) The picture is operational: it says where to reduce
+coupling, where to detect it, and what to certify.
+
+so genuinely long-form generation is untested; (iii) the two signalbased components are conditional: Sequester helps cooperative
+deepseek-v4-flash but not adversarial roles or qwen-flash (a
+counterfactual injection does not support an answer-herding mechanism, which we leave unresolved), and Detect helps the flash tier
+but not the still-rank-informative GLM-5.1; only the conformal certificate is collapse-unconditional; (iv) 𝑅∞ is estimated from a finite
+horizon (𝑇 = 8), so terminal quantities are conservative; and (v) the
+conformal layer needs exchangeability, which distribution shift between calibration and deployment can violate, calling for weighted
+or online variants.
+
+Assumptions and scope. The results rest on the variance identity (exact under equicorrelation, Lemma 3.2; structure-free under
+Proposition B.2) and diversity collapse (Assumption 1, verified at
+𝜅¯ (𝑇 ) = 0.997). We do not assume the reported confidence is any
+particular statistic of agreement (only that it is continuous and
+maximal at unanimity, Definition 3.1) nor that 𝑅∞ is irreducible by
+any procedure: it is the error left by this debate, which retrieval,
+tools, or genuinely diverse agents could lower. Once confidence
+saturates (Theorem 4.1), lowering 𝑅∞ is the only remaining way to
+shrink the gap; Prevent instead acts earlier.
+
+Practical guidance. The CMAD routing logic follows: (i) prefer
+cooperative/critique over persuasion/consensus roles; (ii) Prevent
+with Verdict-Sequestered Debate under cooperative roles where
+it applies; (iii) Detect: never read agreement or saturated confidence as correctness (Corollary 4.2), instead recovering selective
+prediction from a trajectory trust score where confidence has gone
+rank-uninformative; and (iv) Certify the committed answer with a
+split-conformal guarantee, the one component that holds in every
+regime.
+Conclusion. Debate makes panels agree, but because that agreement is endogenous, a one-line variance identity shows that apparent confidence and correctness diverge precisely where the residual
+error is largest. Since self-produced agreement cannot certify its
+producer, Calibrated Multi-Agent Debate prevents transcript coupling, detects residual coupling from the consensus trajectory, and
+certifies answers with an exogenous split-conformal guarantee; the
+first two levers are conditional, whereas the certificate remains
+valid across collapse regimes.
+
+Scope and threats to validity. Our study spans nineteen tasks (fifteen multiple-choice, plus ReClor, CommonsenseQA, and the freeform GSM8K and TriviaQA), five model families, and 𝑁 ∈ {3, 5, 7};
+the gap-vs-residual prediction reproduces on all four additional
+models (slopes in (0, 1), 𝑅 2 0.76–1.00), the single-constant shortfall
+recovers the saturated tier out of sample, and the relation extends
+to free-form and is robust to team size: a cross-family regularity.
+Limits: (i) the mechanism is further confirmed on a reasoning model
+(QwQ-plus: slope 0.92, 𝐶𝑇 = 0.98), leaving only still-larger scales
+untested; (ii) our free-form tasks have short, checkable answers,
+9
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+References
+
+[32] S. Lin, J. Hilton, and O. Evans. 2022. TruthfulQA: Measuring how models mimic
+human falsehoods. In ACL. 3214–3252.
+[33] M. Minderer, J. Djolonga, R. Romijnders, F. Hubis, X. Zhai, N. Houlsby, D. Tran,
+and M. Lucic. 2021. Revisiting the calibration of modern neural networks. In
+NeurIPS.
+[34] R. Olfati-Saber, J. A. Fax, and R. M. Murray. 2007. Consensus and cooperation in
+networked multi-agent systems. Proc. IEEE 95, 1 (2007), 215–233.
+[35] OpenAI. 2024. GPT-4o mini: advancing cost-efficient intelligence. https://
+openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/; accessed
+via OpenRouter.
+[36] Y. Ovadia et al. 2019. Can you trust your model’s uncertainty? Evaluating
+predictive uncertainty under dataset shift. In NeurIPS.
+[37] Qwen Team, Alibaba. 2026. Qwen-Flash. Model accessed via the Alibaba Cloud
+Model Studio (DashScope) OpenAI-compatible API.
+[38] Qwen Team, Alibaba. 2026. QwQ-Plus: A reasoning model. Model accessed via
+the Alibaba Cloud Model Studio (DashScope) OpenAI-compatible API.
+[39] A. Ramdas, P. Grünwald, V. Vovk, and G. Shafer. 2023. Game-theoretic statistics
+and safe anytime-valid inference. Statist. Sci. 38, 4 (2023), 576–601.
+[40] Y. Romano, M. Sesia, and E. J. Candès. 2020. Classification with valid and adaptive
+coverage. In NeurIPS.
+[41] A. Smit, N. Grinsztajn, P. Duckworth, T. D. Barrett, and A. Pretorius. 2024. Should
+we be going MAD? a look at multi-agent debate strategies for LLMs. In ICML.
+[42] A. Talmor, J. Herzig, N. Lourie, and J. Berant. 2019. CommonsenseQA: A question
+answering challenge targeting commonsense knowledge. In NAACL. 4149–4158.
+[43] K. Tian et al. 2023. Just ask for calibration: Strategies for eliciting calibrated
+confidence scores from language models. In EMNLP.
+[44] R. J. Tibshirani, R. Foygel Barber, E. J. Candès, and A. Ramdas. 2019. Conformal
+prediction under covariate shift. In NeurIPS.
+[45] N. Ueda and R. Nakano. 1996. Generalization error of ensemble estimators. In
+Proceedings of the IEEE International Conference on Neural Networks (ICNN), Vol. 1.
+90–95.
+[46] V. Vovk, A. Gammerman, and G. Shafer. 2005. Algorithmic Learning in a Random
+World. Springer.
+[47] M. F. Wang, H. Xie, G. Wang, et al. 2026. From debate to decision: Conformal
+social choice for safe multi-agent deliberation. arXiv preprint arXiv:2604.07667
+(2026).
+[48] X. Wang et al. 2023. Self-consistency improves chain of thought reasoning in
+language models. In ICLR.
+[49] A. Wynn, H. Satija, and G. Hadfield. 2025. Talk isn’t always cheap: Understanding
+failure modes in multi-agent debate. arXiv preprint arXiv:2509.05396 (2025).
+[50] M. Xiong, Z. Hu, X. Lu, Y. Li, J. Fu, J. He, and B. Hooi. 2024. Can LLMs express
+their uncertainty? An empirical evaluation of confidence elicitation in LLMs. In
+ICLR.
+[51] Y. Yang, C. Qu, M. Wen, L. Shi, Y. Wen, W. Zhang, A. Wierman, and S. Gu. 2026.
+Understanding agent scaling in LLM-based multi-agent systems via diversity.
+arXiv preprint arXiv:2602.03794 (2026).
+[52] W. Yu, Z. Jiang, Y. Dong, and J. Feng. 2020. ReClor: A reading comprehension
+dataset requiring logical reasoning. In ICLR.
+[53] L. Zheng, W.-L. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang, Z. Lin, Z. Li, D. Li,
+E. P. Xing, H. Zhang, J. E. Gonzalez, and I. Stoica. 2023. Judging LLM-as-a-judge
+with MT-Bench and Chatbot Arena. In NeurIPS Datasets and Benchmarks.
+[54] Zhipu AI. 2026. GLM-5.1. Model accessed via an OpenAI-compatible API endpoint.
+[55] X. Zhou, H. Nguyen, B. Yu, C. Liu, and L. Cheng. 2026. Adaptive stopping for
+multi-turn LLM reasoning. arXiv preprint arXiv:2604.01413 (2026).
+
+[1] A. N. Angelopoulos and S. Bates. 2021. A gentle introduction to conformal
+prediction and distribution-free uncertainty quantification. arXiv preprint
+arXiv:2107.07511 (2021).
+[2] A. N. Angelopoulos, S. Bates, J. Malik, and M. I. Jordan. 2021. Uncertainty sets
+for image classifiers using conformal prediction. In ICLR.
+[3] G. Brown, J. Wyatt, R. Harris, and X. Yao. 2005. Diversity creation methods: A
+survey and categorisation. Information Fusion 6, 1 (2005), 5–20.
+[4] C.-M. Chan, W. Chen, Y. Su, J. Yu, W. Xue, S. Zhang, J. Fu, and Z. Liu. 2024.
+ChatEval: Towards better LLM-based evaluators through multi-agent debate. In
+ICLR.
+[5] Edward Y. Chang and Ethan Y. Chang. 2025. Multi-agent collaborative
+intelligence: Dual-dial control for reliable LLM reasoning. arXiv preprint
+arXiv:2510.04488 (2025).
+[6] P. Clark, I. Cowhey, O. Etzioni, T. Khot, A. Sabharwal, C. Schoenick, and O.
+Tafjord. 2018. Think you have solved question answering? Try ARC, the AI2
+reasoning challenge. arXiv preprint arXiv:1803.05457 (2018).
+[7] K. Cobbe, V. Kosaraju, M. Bavarian, M. Chen, H. Jun, L. Kaiser, M. Plappert, J.
+Tworek, J. Hilton, R. Nakano, C. Hesse, and J. Schulman. 2021. Training verifiers
+to solve math word problems. arXiv preprint arXiv:2110.14168 (2021).
+[8] W. G. Cochran. 1977. Sampling Techniques (3rd ed.). Wiley.
+[9] DeepSeek-AI. 2026. DeepSeek-V4-Flash. Model accessed via the DeepSeek API
+(https://api.deepseek.com).
+[10] T. G. Dietterich. 2000. Ensemble methods in machine learning. In Multiple
+Classifier Systems (MCS) (Lecture Notes in Computer Science, Vol. 1857). 1–15.
+[11] Y. Du, S. Li, A. Torralba, J. B. Tenenbaum, and I. Mordatch. 2023. Improving
+factuality and reasoning in language models through multiagent debate. arXiv
+preprint arXiv:2305.14325 (2023).
+[12] A. Dubey et al. 2024. The Llama 3 herd of models. arXiv preprint arXiv:2407.21783
+(2024). We use Llama-3.3-70B-Instruct, accessed via OpenRouter.
+[13] S. Eo, H. Moon, E. H. Zi, C. Park, and H. Lim. 2025. Debate only when necessary:
+Adaptive multiagent collaboration for efficient LLM reasoning. arXiv preprint
+arXiv:2504.05047 (2025).
+[14] W. Fan, J. Yoon, and B. Ji. 2025. iMAD: Intelligent multi-agent debate for efficient
+and accurate LLM inference. arXiv preprint arXiv:2511.11306 (2025). To appear,
+AAAI 2026.
+[15] Y. Geifman and R. El-Yaniv. 2017. Selective classification for deep neural networks.
+In NeurIPS.
+[16] J. Geng, F. Cai, Y. Wang, H. Koeppl, P. Nakov, and I. Gurevych. 2024. A survey
+of confidence estimation and calibration in large language models. In NAACL.
+6577–6595.
+[17] C. Guo, G. Pleiss, Y. Sun, and K. Q. Weinberger. 2017. On calibration of modern
+neural networks. In ICML.
+[18] L. K. Hansen and P. Salamon. 1990. Neural network ensembles. IEEE Transactions
+on Pattern Analysis and Machine Intelligence 12, 10 (1990), 993–1001.
+[19] D. Hendrycks, C. Burns, S. Basart, A. Zou, M. Mazeika, D. Song, and J. Steinhardt.
+2021. Measuring massive multitask language understanding. In ICLR.
+[20] S. Hong et al. 2023. MetaGPT: Meta programming for multi-agent collaborative
+framework. arXiv preprint arXiv:2308.00352 (2023).
+[21] T. Hu, Z. Tan, S. Wang, H. Qu, and T. Chen. 2025. Multi-agent debate for LLM
+judges with adaptive stability detection. In NeurIPS.
+[22] J. Huang, X. Chen, S. Mishra, H. S. Zheng, A. W. Yu, X. Song, and D. Zhou. 2024.
+Large language models cannot self-correct reasoning yet. In ICLR.
+[23] Y. Huang, J. Song, Z. Wang, S. Zhao, H. Chen, F. Juefei-Xu, and L. Ma. 2025. Look
+before you leap: An exploratory study of uncertainty analysis for large language
+models. IEEE Transactions on Software Engineering 51, 2 (2025).
+[24] M. Joshi, E. Choi, D. Weld, and L. Zettlemoyer. 2017. TriviaQA: A large scale
+distantly supervised challenge dataset for reading comprehension. In ACL. 1601–
+1611.
+[25] W. Kong, S. Lai, J. Piao, and J. Evans. 2026. Multi-LLM systems exhibit robust
+semantic collapse. arXiv preprint arXiv:2605.17193 (2026).
+[26] A. Krogh and J. Vedelsby. 1995. Neural network ensembles, cross validation, and
+active learning. In Advances in Neural Information Processing Systems (NeurIPS).
+231–238.
+[27] L. Kuhn, Y. Gal, and S. Farquhar. 2023. Semantic uncertainty: Linguistic invariances for uncertainty estimation in natural language generation. In ICLR.
+[28] L. I. Kuncheva and C. J. Whitaker. 2003. Measures of diversity in classifier
+ensembles and their relationship with the ensemble accuracy. Machine Learning
+51, 2 (2003), 181–207.
+[29] B. Lakshminarayanan, A. Pritzel, and C. Blundell. 2017. Simple and scalable
+predictive uncertainty estimation using deep ensembles. In NeurIPS.
+[30] G. Li, H. Hammoud, H. Itani, D. Khizbullin, and B. Ghanem. 2023. CAMEL:
+Communicative agents for “mind” exploration of large language model society.
+In NeurIPS.
+[31] T. Liang, Z. He, W. Jiao, X. Wang, Y. Wang, R. Wang, Y. Yang, S. Shi, and Z.
+Tu. 2024. Encouraging divergent thinking in large language models through
+multi-agent debate. In EMNLP. 17889–17904.
+10
+
+When Consensus Is Not Correctness
+
+A
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Notation
+
+Table 4 collects the symbols used throughout the paper, grouped into Roman symbols, Greek symbols, and acronyms, each ordered
+alphabetically. Turn-indexed quantities are written · (𝑡); a subscript ∞ denotes the collapse limit and 𝑇 the terminal turn.
+Table 4: Notation used in the paper.
+Symbol
+
+Meaning
+
+Roman symbols
+𝐴(𝑡), 𝐴𝑡
+AUROC
+𝐵
+𝑐𝑖 (𝑡)
+𝐶 (𝑡), 𝐶𝑡
+𝐶e(𝑡)
+b𝛼 (𝑡)
+C
+Dsel, Dthr
+ECE
+𝐺 (𝑡), 𝐺𝑡
+𝐾
+ℓ (𝑡)
+𝑁
+𝑝ˆ𝑘 (𝑡)
+P
+𝑞ˆ𝛼 (𝑡)
+𝑄
+𝑅
+𝑠𝑘 (𝑡)
+𝑆 2 (𝑡)
+𝑡,𝑇
+𝑋𝑖 (𝑡)
+𝑦, Y
+𝑦ˆ𝑖 (𝑡)
+
+Accuracy of the aggregated (modal) answer at turn 𝑡; 𝐴∞ its limit, 𝐴𝑇 the terminal value.
+Area under the ROC curve for correctness ranking.
+Number of replicates per condition in the experiments.
+Agent 𝑖’s self-reported confidence at turn 𝑡, in [0, 1].
+Í
+Reported (panel) confidence, 𝑁1 𝑖 𝑐𝑖 (𝑡); 𝐶 ∞ = 1 − 𝜀 its limit.
+Apparent (agreement-based) confidence an operator reads from observed agreement.
+b𝛼 | its size.
+Conformal prediction set at turn 𝑡 and level 𝛼; | C
+Selection fold (for the stopping turn) and threshold fold (for the conformal quantile).
+Expected calibration error over 10 equal-width bins; ΔECE = ECE𝑇 − ECE1 .
+Calibration / overconfidence gap, 𝐶 (𝑡) − 𝐴(𝑡); 𝐺 ∞ the terminal gap.
+Number of answer options (classes).
+Loss, 1 − 𝐴(𝑡).
+Number of agents in the panel.
+Í
+Pooled vote fraction for class 𝑘, 𝑁1 𝑖 1[𝑦ˆ𝑖 (𝑡) = 𝑘].
+Instance distribution (questions drawn i.i.d.).
+Empirical conformal quantile threshold at level 𝛼.
+Number of questions per condition.
+Residual error, 1 − 𝐴𝑇 (the irreducible part; 𝑅∞ = lim𝑡 ℓ (𝑡)).
+Nonconformity score of class 𝑘, 1 − 𝑝ˆ𝑘 (𝑡).
+2
+Í
+Score dispersion across agents, 𝑁1 𝑖 𝑋𝑖 (𝑡) − 𝜇ˆ𝑡 .
+★
+Turn index and horizon (number of turns); 𝑡 the calibration-selected stopping turn.
+Per-agent correctness score, 𝜙 (𝑦ˆ𝑖 (𝑡), 𝑐𝑖 (𝑡)) ∈ [0, 1].
+Gold (true) label and the answer space {1, . . . , 𝐾 }.
+Agent 𝑖’s answer at turn 𝑡; 𝑦ˆagg (𝑡) the aggregated modal answer.
+
+Greek symbols
+𝛼
+Δ𝐴, Δ𝐶, Δ𝐺
+𝜀
+𝜅 (𝑡)
+𝜇ˆ𝑡
+𝜌 (𝑡)
+𝜎 2 (𝑡)
+𝜏 (𝑥)
+𝜙 (·)
+
+Conformal miscoverage level (e.g. 0.1).
+Change of a quantity over the horizon, (·)(𝑇 ) − (·)(1).
+Confidence shortfall, 1 − 𝐶 ∞ ; 𝜀¯ the single shared constant (≈ 0.037).
+Answer consensus: fraction of votes on the modal answer.
+Í
+Aggregate score, 𝑁1 𝑖 𝑋𝑖 (𝑡).
+Inter-agent (equi)correlation of 𝑋𝑖 (𝑡); 𝜌 ∞ its limit (collapse if 𝜌 ∞ = 1).
+2
+Per-agent variance of 𝑋𝑖 (𝑡); 𝜎max
+its bound.
+Deliberation trust score in [0, 1] (label-free trajectory features).
+Correctness-score map (𝑐 if the answer is correct, 1 − 𝑐 otherwise).
+
+Acronyms
+CMAD
+Certify / Affirm
+Detect / Deliberation
+ICC
+Prevent / Sequester
+
+Calibrated Multi-Agent Debate (the framework).
+Conformal Verdict Affirmation: the exogenous coverage guarantee.
+Deliberation-Speed Trust: label-free trajectory-based trust score.
+Intraclass correlation (one-way random-effects estimator for 𝜌).
+Verdict-Sequestered Debate: peers’ committed verdicts withheld.
+
+11
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+B Proofs
+B.1 The collapse-dynamics identity (Lemma 3.2)
+
+0.49–0.58), so terminal confidence is at best a weak ranker there. In
+contrast a pre-collapse statistic such as the dispersion 𝑆 2 (𝑡) at small
+𝑡, or the turns-to-consensus, has Var𝑥 > 0 because 𝜌 (𝑡) < 1 there,
+so it can retain rank information; this is what the Detect component
+exploits.
+□
+
+Proof. Fix 𝑡 and drop it from the notation. With Var(𝑋𝑖 ) = 𝜎 2
+and Cov(𝑋𝑖 , 𝑋 𝑗 ) = 𝜌𝜎 2 for 𝑖 ≠ 𝑗,
+i
+Í
+1 hÍ
+Var( ˆ𝜇) = 2 𝑖 Var(𝑋𝑖 ) + 𝑖≠𝑗 Cov(𝑋𝑖 , 𝑋 𝑗 )
+𝑁
+
+1 
+= 2 𝑁 𝜎 2 + 𝑁 (𝑁 − 1)𝜌𝜎 2
+(7)
+𝑁
+2
+
+
+𝜎
+=
+1 + (𝑁 − 1)𝜌 .
+𝑁
+Í
+Í
+For the dispersion, 𝑖 (𝑋𝑖 − ˆ𝜇) 2 = 𝑖 𝑋𝑖2 − 𝑁 𝜇ˆ2 , so by linearity
+hÍ
+i ∑︁
+E 𝑖 (𝑋𝑖 − ˆ𝜇) 2 =
+E[𝑋𝑖2 ] − 𝑁 E[ 𝜇ˆ2 ]
+
+B.4
+
+Proof. By definition 𝐺 ∞ = 𝐶 ∞ − 𝐴∞ and 𝐴∞ = 1 − 𝑅∞ , so
+𝐺 ∞ = 𝐶 ∞ − 1 + 𝑅∞ = 𝑅∞ − (1 − 𝐶 ∞ ).
+
+ 2
+
+2
+𝜎
+𝑁 [1 + (𝑁 − 1)𝜌] + 𝜇
+
+
+
+(8)
+
+𝐺 ∞ = 𝑅∞ − 𝜀.
+
+= 𝜎 2 (𝑁 − 1)(1 − 𝜌),
+
+Confidence saturation (Theorem 4.1)
+
+𝜕𝐺 ∞
+𝜕𝜀
+=1−
+,
+𝜕𝑅∞
+𝜕𝑅∞
+
+Proof. By Lemma 3.2,
+𝑁 −1 2
+𝜎 (𝑡) (1 − 𝜌 (𝑡)).
+(9)
+𝑁
+2
+Since 𝜎 2 (𝑡) ≤ 𝜎max
+and 𝜌 (𝑡) → 1, the right-hand side → 0, so
+2
+1
+𝑆 (𝑡) → 0 in 𝐿 and hence in probability. The observed disagreement also vanishes in this limit by Assumption 1, and the apparent
+confidence 𝐶e(𝑡) is a continuous statistic of that disagreement (Definition 3.1), maximal at unanimity, so the continuous mapping
+theorem gives 𝐶e(𝑡) → 1. No step uses the residual error 𝑅∞ or the
+bias, so the limit is independent of correctness.
+□
+E[𝑆 2 (𝑡)] =
+
+B.3
+
+(12)
+
+If 𝜀 is constant across tasks the relation is affine in 𝑅∞ with unit
+slope and intercept −𝜀. If 𝜀 depends on the task, differentiating
+(where 𝜀 is differentiable in 𝑅∞ ) gives
+
+using E[𝑋𝑖2 ] = 𝜎 2 + 𝜇 2 and E[ 𝜇ˆ2 ] = Var( ˆ𝜇) + 𝜇 2 . Dividing by 𝑁
+gives E[𝑆 2 ] = 𝑁𝑁−1 𝜎 2 (1 − 𝜌).
+□
+
+B.2
+
+(11)
+
+Under collapse the reported confidence co-saturates (Theorem 4.1
+and the remark following it), 𝐶 ∞ → 1 in the ideal limit, whence
+𝐺 ∞ → 𝑅∞ . Writing the confidence shortfall 𝜀 = 1 − 𝐶 ∞ ≥ 0, we
+have
+
+𝑖
+
+= 𝑁 (𝜎 2 + 𝜇 2 ) − 𝑁
+
+Overconfidence tracks the residual
+(Theorem 4.3 and Corollary 4.4)
+
+(13)
+
+and with no smoothness assumption the same monotonicity follows
+from 𝐺 ∞ (𝑅2 ) − 𝐺 ∞ (𝑅1 ) = (𝑅2 − 𝑅1 ) − (𝜀 (𝑅2 ) − 𝜀 (𝑅1 )) for 𝑅1 < 𝑅2 .
+Under the mild condition that the confidence shortfall grows no
+faster than the residual, 0 ≤ 𝜕𝜀/𝜕𝑅∞ < 1 (equivalently 𝜀 (𝑅2 ) −
+𝜀 (𝑅1 ) < 𝑅2 − 𝑅1 ; so harder tasks do not become better calibrated),
+the slope lies in (0, 1] and 𝐺 ∞ is strictly increasing in 𝑅∞ , which is
+Corollary 4.4. The empirical slope 0.82 ∈ (0, 1] is consistent with a
+small positive 𝜕𝜀/𝜕𝑅∞ .
+□
+
+B.5
+
+Terminal agreement loses its rank signal
+(Corollary 4.2)
+
+Finite-time overconfidence rate
+(Proposition B.1)
+
+Proposition B.1 (Finite-time overconfidence rate). Let the
+apparent confidence be a dispersion map 𝐶e(𝑡) = 𝑔(E[𝑆 2 (𝑡)]) with
+2 ], write 𝑅 =
+𝑔(0) = 1, 𝑔 nonincreasing and 𝐿-Lipschitz on [0, 𝜎max
+𝑡
+e(𝑡) = 𝐶e(𝑡) − 𝐴(𝑡) be the apparent gap. Then at
+1 − 𝐴(𝑡), and let 𝐺
+every turn,
+
+Proof. Write 𝐶 ∞ (𝑥) for the terminal (reported) confidence on
+instance 𝑥 of a fixed task. By Theorem 4.1 and the reported cosaturation, 𝐶 ∞ (𝑥) concentrates at a common ceiling for every 𝑥, so
+Var𝑥 [𝐶 ∞ (𝑥)] → 0: the score concentrates at that ceiling. Recall the
+rank statistic
+
+AUROC = P 𝐶 ∞ (𝑥 + ) > 𝐶 ∞ (𝑥 − )
+(10)
+
++ 21 P 𝐶 ∞ (𝑥 + ) = 𝐶 ∞ (𝑥 − ) ,
+
+e(𝑡) ≤ 𝑅𝑡 .
+𝑅𝑡 − 𝐿 𝑁𝑁−1 𝜎 2 (𝑡) (1 − 𝜌 (𝑡)) ≤ 𝐺
+
+(14)
+
+Hence the apparent overconfidence is within 𝐿 E[𝑆 2 (𝑡)] of the residual
+already at turn 𝑡, contracting at the rate of the measurable collapse
+e∞ = 𝑅∞ as 𝜌 (𝑡) → 1 (Theorem 4.3).
+factor 1 − 𝜌 (𝑡) and recovering 𝐺
+
+where 𝑥 +, 𝑥 − are an independent correct and incorrect instance.
+At exact saturation (𝐶 ∞ constant in 𝑥) every such pair is a tie, so
+AUROC = 12 exactly. Off this degenerate point the ranking by 𝐶 ∞
+is the ranking by the shortfall 𝜀 (𝑥) = 1 − 𝐶 ∞ (𝑥); since AUROC is
+invariant to the scale of the score, it is not a function of Var𝑥 [𝐶 ∞ ],
+and a vanishing 𝜀 can still rank the labels perfectly (e.g. 𝜀 (𝑥) = 𝛿
+on incorrect and 0 on correct instances gives AUROC = 1 for
+every 𝛿 > 0). Variance collapse therefore does not by itself force
+the AUROC to 12 ; it guarantees only that whatever discrimination
+remains lives entirely in the vanishing 𝜀 (𝑥), which carries reliable
+rank information only if its sign relative to correctness is systematic.
+Empirically it is near chance on the hard tasks (within-task AUROC
+
+The bound governs dispersion-based confidences (𝐶e = 1 − 𝑆 2 gives
+𝐿 = 1, where the lower bound is tight); the answer-consensus 𝜅
+and the reported confidence 𝐶 need not be Lipschitz functions of
+𝑆 2 and are not covered.
+Proof. By 𝑔(0) = 1, monotonicity, and the Lipschitz bound,
+e(𝑡) = 𝐶e(𝑡) −
+1 − 𝐶e(𝑡) = 𝑔(0) −𝑔(E[𝑆 2 (𝑡)]) ∈ [0, 𝐿 E[𝑆 2 (𝑡)]]; with 𝐺
+e
+𝐴(𝑡) = 𝑅𝑡 − (1 − 𝐶 (𝑡)) this gives the two bounds after substituting
+E[𝑆 2 (𝑡)] = 𝑁𝑁−1 𝜎 2 (𝑡)(1 − 𝜌 (𝑡)) (Lemma 3.2).
+□
+12
+
+When Consensus Is Not Correctness
+
+B.6
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Productive–overconfident dichotomy
+(Theorem 4.5)
+
+P(𝑦ˆagg ≠ 𝑦) = ℓ∞ = 𝑅∞ by definition of the residual. Affirm returns
+b𝛼 (𝑡 ★) at the calibration-selected stopping turn 𝑡 ★ with P(𝑦 ∉
+C
+b𝛼 (𝑡 ★)) ≤ 𝛼 by the coverage guarantee (Theorem 5.5). Subtracting
+C
+the two miscoverage probabilities,
+
+Proof. By definition 𝐺 (𝑡) = 𝐶 (𝑡) − 𝐴(𝑡), hence Δ𝐺 = 𝐺 (𝑇 ) −
+𝐺 (1) = Δ𝐶−Δ𝐴. Under Assumption 1 the agents’ observed disagreement is nonincreasing over the horizon, so the reported confidence
+𝐶 (𝑡) is nondecreasing (it co-saturates with the apparent confidence),
+giving Δ𝐶 = 𝐶 (𝑇 ) − 𝐶 (1) ≥ 0. Therefore
+Δ𝐺 < 0 ⇐⇒ Δ𝐴 > Δ𝐶 ≥ 0.
+
+err(agreement-stop) − err(Affirm) ≥ 𝑅∞ − 𝛼 .
+
+Since 𝑅∞ can be any value in [0, 1] (around 0.23 on moral scenarios)
+while 𝛼 is fixed, the difference is positive whenever 𝑅∞ > 𝛼, and as
+large as 𝑅∞ − 𝛼 (up to 1 − 𝛼, attained as 𝑅∞ → 1).
+□
+
+(15)
+
+Because Δ𝐶 ≥ 0, a necessary condition for calibration improvement
+(Δ𝐺 < 0) is Δ𝐴 > 0: debate that does not raise accuracy cannot improve calibration, and strictly degrades it (Δ𝐺 = Δ𝐶 > 0) whenever
+the collapse inflates confidence (Δ𝐶 > 0) with no accuracy gain
+(Δ𝐴 = 0).
+□
+
+B.7
+
+B.10
+
+Split-conformal coverage (Theorem 5.4)
+𝑦
+
+test true-label score 𝑠 𝑦test (𝑡) are obtained by applying the same turn-𝑡
+procedure to the calibration and test instances; under exchangeability of the instances they are exchangeable. Hence the rank of
+𝑠 𝑦test (𝑡) among the 𝑛 + 1 scores is uniform on {1, . . . , 𝑛 + 1}, and with
+𝑞ˆ𝛼 (𝑡) the ⌈(𝑛 + 1) (1 − 𝛼)⌉/𝑛 empirical quantile of the calibration
+scores,
+
+⌈(𝑛 + 1)(1 − 𝛼)⌉
+P 𝑠 𝑦test (𝑡) ≤ 𝑞ˆ𝛼 (𝑡) ≥
+(16)
+𝑛+1
+≥ 1 − 𝛼,
+
+Proposition B.2 (Collapse under general covariance). Sup2 11⊤ (all pairpose the covariance converges to rank one, Σ(𝑡) → 𝜎∞
+2
+wise correlations → 1 and all variances → 𝜎∞ ). Then:
+(i) the aggregate variance loses the averaging benefit, Var( 𝜇ˆ𝑡 ) =
+1⊤ Σ(𝑡)1
+2;
+→ 𝜎∞
+𝑁2
+(ii) every centered dispersion statistic 𝐷 (𝑡) = 𝑋 (𝑡) ⊤ 𝑀𝑋 (𝑡)
+ with
+𝑀1 = 0 vanishes in expectation, E[𝐷 (𝑡)] = tr 𝑀 Σ(𝑡) → 0.
+Consequently any dispersion-based confidence satisfies 𝐶e(𝑡) → 1
+and the terminal calibration gap satisfies 𝐺 ∞ → 𝑅∞ , identically to
+Theorems 4.1–4.3.
+
+b𝛼 (𝑡). No quantity in the arguwhich is exactly the event 𝑦 ∈ C
+ment depends on 𝜌 (𝑡) or on the apparent confidence 𝐶e(𝑡), so the
+guarantee is unaffected by diversity collapse.
+□
+
+Coverage at the selected stopping turn
+(Theorem 5.5)
+
+Proof. (i) Writing 𝜇ˆ𝑡 = 𝑁1 1⊤𝑋 (𝑡),
+1 ⊤
+1 2 ⊤ ⊤
+1 Σ(𝑡)1 → 2 𝜎∞
+1 11 1
+𝑁2
+𝑁
+𝜎2
+𝜎2
+2
+= ∞2 (1⊤ 1) 2 = ∞2 𝑁 2 = 𝜎∞
+,
+𝑁
+𝑁
+using 1⊤ 1 = 𝑁 . (ii) Since 𝑋 ⊤ 𝑀𝑋 is quadratic and 𝑀1 = 0,
+
+Proof. The stopping turn 𝑡 ★ is a function of the selection fold
+Dsel only, hence independent of both the threshold fold Dthr and
+the test instance. Condition on Dsel ; then 𝑡 ★ = 𝜏 is a fixed index,
+while Dthr and the test instance are unaffected by the conditioning
+(they are independent of Dsel ) and remain exchangeable. Applying
+Theorem 5.4 at the fixed turn 𝜏 with calibration fold Dthr gives
+b𝛼 (𝜏) | Dsel ) ≥ 1 − 𝛼; since this holds for every realization
+P(𝑦 ∈ C
+of Dsel , taking the expectation over Dsel preserves it,
+
+b𝛼 (𝑡 ★) ≥ 1 − 𝛼 .
+P𝑦∈C
+(17)
+
+Var( 𝜇ˆ𝑡 ) =
+
+E[𝑋 ⊤ 𝑀𝑋 ] = tr(𝑀Σ) + 𝜇 2 1⊤ 𝑀1 = tr(𝑀Σ),
+
+(19)
+
+(20)
+
+2 11⊤ ,
+and as Σ → 𝜎∞
+2
+2 ⊤
+tr(𝑀Σ) → 𝜎∞
+tr(𝑀11⊤ ) = 𝜎∞
+1 𝑀1 = 0.
+(21)
+1 Í
+2
+The centered correctness-score dispersion 𝑆 (𝑡) = 𝑁 𝑖 (𝑋𝑖 − 𝜇ˆ𝑡 ) 2 of
+Definition 3.1 is of this form (with 𝑀 = 𝑁1 (𝐼 − 𝑁1 11⊤ ), which satisfies
+𝑀1 = 0), so E[𝑆 2 (𝑡)] → 0 and the conclusions of Theorems 4.1–4.3
+follow by their proofs.
+□
+
+Per-instance variant (Remark 1). If 𝑡 ★ may depend on the test
+b𝛼 ′ (𝑡)) ≤
+point, fix the level at 𝛼 ′ = 𝛼/𝑇max . For each fixed 𝑡, P(𝑦 ∉ C
+b𝛼 ′ (𝑡)) ≤ 𝑇max 𝛼 ′ = 𝛼; thus
+𝛼 ′ , so a union bound gives P(∃𝑡 : 𝑦 ∉ C
+b𝛼 ′ (𝑡) ∀𝑡 } has P(𝐸) ≥ 1 − 𝛼,
+the simultaneous event 𝐸 = {𝑦 ∈ C
+and on 𝐸 coverage holds at the realized 𝑡 ★ for any selection rule.
+The anytime-valid form replaces the union bound by the optionalstopping property of a conformal test martingale [39].
+□
+
+B.9
+
+Collapse under general covariance
+(Proposition B.2)
+
+Equicorrelation (Lemma 3.2) is used only for closed forms; the
+collapse mechanism is structure-free. Let 𝑋 (𝑡) ∈ R𝑁 have mean
+E[𝑋 (𝑡)] = 𝜇 (𝑡)1 and covariance Σ(𝑡) ≻ 0 with bounded diago2 . The debate aggregate is the simple mean 𝜇ˆ =
+nal Σ𝑖𝑖 (𝑡) ≤ 𝜎max
+𝑡
+1 ⊤
+𝑁 1 𝑋 (𝑡) (agents are weighted equally); under inverse-variance
+(generalized least squares, GLS) weighting the weights are 𝑤 ★ =
+Σ(𝑡) −1 1/(1⊤ Σ(𝑡) −1 1), which reduce to 1/𝑁 under equicorrelation,
+so the two coincide in the symmetric case.
+
+Proof. Fix a turn 𝑡. The calibration scores {𝑠 ( 𝑗( )𝑗 ) (𝑡)}𝑛𝑗=1 and the
+
+B.8
+
+(18)
+
+C
+
+The Affirm stopping algorithm and
+conformal variants
+
+Proposition C.1 (CMAD safety invariant: efficiency–coverage decoupling). Let the returned object be the conformal set
+b𝛼 (𝑡 ★) of Algorithm 1. Augment the debate with any Prevent module
+C
+(a transcript transformation such as Sequester) and any Detect score
+(a label-free statistic routing commit-versus-escalate). Provided (i) the
+
+Safety separation from agreement-stopping
+(Corollary 5.6)
+
+Proof. Under Assumption 1, 𝜅 (𝑡) → 1 ≥ 𝜃 , so agreementstopping halts and returns the modal answer 𝑦ˆagg . Its miscoverage is
+13
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+Algorithm 1 Conformal Verdict Affirmation (Affirm)
+1: Input: max turns 𝑇max , level 𝛼, calibration set split into a selection fold Dsel (|Dsel | = 𝑛 sel ) and an independent threshold fold Dthr
+
+(|Dthr | = 𝑛), tolerance 𝜖 ≥ 0.
+2: // Calibration phase (offline, label-aware).
+3: for 𝑡 = 1, . . . ,𝑇max do
+
+𝑞ˆsel (𝑡) ← the ⌈(𝑛 sel + 1)(1 − 𝛼)⌉/𝑛 sel empirical quantile of the true-label scores {1 − 𝑝ˆ𝑦 ( 𝑗 ) (𝑡)} over Dsel
+5:
+𝑠¯(𝑡) ← mean of {𝑘 : 1 − 𝑝ˆ𝑘 (𝑡) ≤ 𝑞ˆsel (𝑡)} over Dsel
+{mean set size, selection fold only}
+6: end for
+7: 𝑡 ★ ← earliest 𝑡 with 𝑠¯(𝑡) ≤ min𝜏 𝑠¯(𝜏) + 𝜖
+{𝑡 ★ is a function of Dsel only}
+★
+★
+8: ˆ
+𝑞(𝑡 ) ← the ⌈(𝑛 + 1)(1 − 𝛼)⌉/𝑛 empirical quantile of {1 − 𝑝ˆ𝑦 ( 𝑗 ) (𝑡 )} over the independent fold Dthr {deployment threshold, held-out
+fold}
+9: // Deployment phase (per test instance).
+b𝛼 (𝑡 ★) = {𝑘 : 1 − 𝑝ˆ𝑘 (𝑡 ★) ≤ ˆ
+b𝛼 (𝑡 ★)| = 1.
+10: run debate to turn 𝑡 ★ ; return C
+𝑞(𝑡 ★)}; commit to the singleton iff | C
+4:
+
+D
+
+Prevent-modified protocol is applied identically to Dthr and to the test
+instance, and (ii) coverage is evaluated on the full test population at
+b𝛼 (𝑡 ★)) ≥ 1 − 𝛼
+𝑡 ★ (not the Detect-committed subset), then P(𝑦 ∈ C
+regardless of whether Prevent or Detect succeeds; they can change
+only efficiency (set size, abstention rate, turns run), never coverage.
+
+Experimental details
+
+All runs use deepseek-v4-flash (non-thinking), 𝑁 = 3 agents,
+𝑇 = 8 turns, 𝐵 = 3 replicates, temperature 0.7. The two role designs are cooperative (decomposer / analyst / reasoner, instructed
+to critique) and adversarial (two persuaders / a follower, instructed
+to build consensus); both role sets see the same questions under
+a fixed seed. The fifteen multiple-choice tasks are thirteen MMLU
+domains (abstract algebra, college chemistry/mathematics/physics,
+econometrics, formal logic, global facts, high-school physics, marketing, moral scenarios, professional law, professional medicine,
+virology) plus TruthfulQA (the MC1 single-correct multiple-choice
+variant, recast to four options) and ARC-Challenge. Per-domain 𝑄
+uses the full MMLU subject where small (abstract algebra/college
+physics/chemistry/mathematics/global facts = 100; econometrics
+114; formal logic 126; high-school physics 151; virology 166; marketing 200; professional medicine 272), 250 for professional law and
+moral scenarios, and 200 for TruthfulQA and ARC-Challenge. We
+log each agent’s raw answer and verbalized confidence per turn;
+“agreement” is computed from answers only. Conformal calibration/test is a 50/50 question split, with the stopping turn chosen on
+a held-out selection fold (Theorem 5.5). Table 5 reports all thirty percondition trajectories. The extension runs follow the same protocol:
+the cross-model grid re-runs all thirty conditions on qwen-flash
+over matched questions, plus a 16-condition difficulty-spread subset (eight domains × two roles, 𝑄 = 80, 𝐵 = 1) on GLM-5.1 (percondition values in Table 6); the same 16-condition subset is run on
+Llama-3.3-70B and GPT-4o-mini, and an eight-condition cooperative subset on the reasoning model QwQ-plus (thinking enabled,
+peers see committed answers not private chains of thought). The
+new task-type runs use ReClor and CommonsenseQA (trimmed to
+four options); the free-form runs use GSM8K and TriviaQA (𝑄 = 200
+each, with answers scored by numeric/exact match on both models);
+and the robustness runs re-run cooperative debate at 𝑁 ∈ {5, 7} on
+an 80-item difficulty-spread subset (Table 7).
+
+It is immediate from Theorem 5.5: the set’s coverage depends only
+on exchangeability of the 𝑡 ★-scores, which condition (i) preserves
+and which the Detect routing of condition (ii) does not touch, since
+the set is formed before any commit-versus-escalate decision. Both
+conditions are load-bearing: a Prevent toggled between calibration and deployment, or coverage reported only on the Detectcommitted subset, breaks exchangeability and voids the floor (the
+distribution-shift limitation of Section 8).
+Remark 1 (Per-instance and anytime-valid variants). Choosing
+the stopping turn per test instance (for instance the turn giving
+the smallest set for that input) makes the selection data-dependent,
+and one must pay for the union over the horizon: forming each
+set at the Bonferroni level 𝛼/𝑇max gives simultaneous coverage
+b𝛼/𝑇 (𝑡) ∀𝑡 ≤ 𝑇max ) ≥ 1−𝛼, hence coverage at any stopping
+P(𝑦 ∈ C
+max
+time, at the cost of larger sets. An anytime-valid alternative replaces
+the union bound by a conformal test-martingale, valid at arbitrary
+stopping times at level 𝛼 without the 𝑇max factor [39]. We use the
+calibration-selected stop in our experiments because it is both exact
+and informative.
+Remark 2 (The separation is set-valued versus point-valued). Corolb𝛼 | >
+lary 5.6 compares a set-valued predictor (Affirm may return | C
+1, or abstain by returning the full option set) against a point predictor (agreement-stopping commits a singleton), so part of the 𝑅∞ − 𝛼
+gap is bought by Affirm’s license to hedge rather than commit. The
+separation is substantive only where Affirm’s sets stay informative:
+on professional law it holds mean size 1.7–2.6 while cutting confident error from ∼ 0.19 to 0.07, whereas on moral scenarios its zero
+miscoverage is achieved by abstaining (returning all four options),
+the honest behavior when the model cannot discriminate, though
+it yields no information in that case. The separation is therefore
+best read as confident-singleton error versus guaranteed-coverage
+set, not as two point predictors.
+
+Models and API access. All models are queried through the OpenAIcompatible chat.completions interface, so the same debate driver
+runs every backend unchanged. The primary grid uses deepseek-v4flash [9]; the cross-model replications use qwen-flash [37], glm-5.1
+[54], meta-llama/llama-3.3-70b-instruct [12], openai/gpt-4omini [35], and the reasoning model qwq-plus [38]. Generation uses
+14
+
+When Consensus Is Not Correctness
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+temperature 0.7, top_p at the provider default, and max_tokens=
+values are recomputed from the logged per-turn answer/confidence
+220 for the multiple-choice grid (512–768 for the free-form GSM8K/Trivia arrays.
+QA runs, which need room for working). Hybrid-reasoning models
+(DeepSeek-V4, Qwen, GLM) are run non-thinking for comparability:
+we pass the provider’s disable flag ({"thinking":{"type":"
+E.1 Per-condition trajectories
+disabled"}} for DeepSeek and {"enable_thinking":false} for
+Tables 5–7 give the full per-condition breakdown behind the aggrethe DashScope-hosted models) selected automatically from the
+gate claims of Section 7. The pattern is uniform: final confidence
+endpoint. The sole exception is qwq-plus, run with thinking en𝐶𝑇 stays saturated (≥ 0.90 almost everywhere) while accuracy 𝐴𝑇
+abled (it has no non-thinking mode) over a streamed completion;
+spans the full difficulty range, so the overconfidence gap 𝐺𝑇 is espeers see only its committed final answer, never its private chain
+sentially the residual: largest on hard tasks (virology, global facts)
+of thought, keeping the transcript comparable to the non-thinking
+and near zero on easy ones. The same behavior holds on a second
+grid. Transient errors are retried up to four times with escalating
+and third model family (Table 6, slope 0.92) and is invariant to team
+back-off (a longer per-minute wait on HTTP 429); authentication /
+size 𝑁 (Table 7).
+insufficient-balance errors (401/402/403) fail fast, and because every
+completed debate is checkpointed to disk the run resumes without
+recomputation.
+
+E.2
+
+Confidence elicitation. Confidence is verbalized. Each agent ends
+its turn with a single line of the exact form ANSWER: <A|B|C|D>;
+CONFIDENCE: <number in 0.0–1.0> (the <A|B|C|D> slot becomes
+<integer> for GSM8K and <short answer> for TriviaQA), produced in the same generation as the reasoning. There is no separate
+scoring call, and the answer and confidence channels are parsed
+independently so agreement is never computed from correctness.
+Question sampling and seeds. Questions are drawn with a fixed
+NumPy generator (np.random.default_rng, seed 11): we sample
+without replacement and keep the first 𝑄 items with exactly four options and a valid gold index. Every model sees the same items. The
+cross-model and intervention runs are preseeded from the primary
+deepseek-v4-flash run directories (identical questions.json
+and gold), so differences across models reflect the model, not a
+different question draw. TruthfulQA is recast from MC1 to four
+options (the correct answer plus three distractors sampled and shuffled under the same seed) and CommonsenseQA is trimmed from
+five options to four the same way; both transforms are deterministic
+given the seed.
+Metrics. For a condition, accuracy 𝐴𝑡 = P(𝑦ˆagg (𝑡) = 𝑦) is the rate
+at which the modal answer over the 𝑁 ×𝐵 agent–replicate votes
+matches gold, and confidence 𝐶𝑡 is the mean verbalized confidence
+over the same votes and questions; the overconfidence gap is 𝐺𝑡 =
+𝐶𝑡 − 𝐴𝑡 and the residual 𝑅 = 1 − 𝐴𝑇 . Calibration is the expected
+calibration error over 10 equal-width confidence bins (per-question
+consensus answer and mean confidence), and ΔECE = ECE𝑇 −
+ECE1 . The answer consensus 𝜅 (𝑡) is the fraction of votes on the
+modal answer; the inter-agent correlation 𝜌 (𝑡) of the correctness
+score 𝑋𝑖 (𝑡) (Definition 3.1) is a one-way random-effects intraclass
+correlation (ICC). Selective prediction is scored by correctnessranking AUROC and risk–coverage curves; the conformal predictor
+b𝛼 ], mean set size, and turns
+(Definition 5.3) by miscoverage P[𝑦 ∉ C
+run, at 𝛼 = 0.1 on the held-out test split. Confidence intervals are
+cluster bootstraps over conditions (the across-replicate SD of 𝐺𝑇
+averages 0.012).
+
+E
+
+The gap–residual regression in detail
+
+Regressing the terminal gap 𝐺𝑇 = 𝐶𝑇 −𝐴𝑇 on the residual 𝑅 ≈ 1−𝐴𝑇
+across the thirty conditions gives slope 0.82 (cluster-bootstrap 95%
+CI [0.73, 0.88]), intercept −0.01, and 𝑹 2 = 0.96 (Figure 3, center):
+thirty points spanning residuals 0.01–0.43, including both nonMMLU benchmarks, fall on one line, with the largest gaps on the
+hardest tasks and none on the easiest (Corollary 4.4). The slope is
+significantly below 1 (P(slope ≥ 1) ≈ 0), reflecting 𝐶 ∞ ≈ 0.96 < 1
+exactly as Theorem 4.3 predicts (𝐺 ∞ = 𝑅∞ − 𝜀); we therefore state
+the relation as “slope in (0, 1], attenuated by 𝜀.” Estimates are tight
+(across-replicate SD of 𝐺𝑇 averages 0.012). The gap is part preexisting single-model overconfidence and part debate-amplified,
+in a model-dependent mix: decomposed against turn 1, the mean
+debate-added gap is +0.06 on deepseek-v4-flash (concentrated
+on hard tasks, moral scenarios +0.13, virology +0.09), so debate
+manufactures overconfidence there, whereas qwen-flash is already
+overconfident at turn 1 (𝐺¯1 = 0.18) and debate merely surfaces it.
+The inflation is not just extra reasoning turns: confidence rises
++0.088 on the seventeen deepseek-v4-flash conditions with flat
+accuracy (|Δ𝐴| < 0.03), and a matched lone-agent self-critique
+control splits the sources: a single-model self-reinforcement component (Δ𝐶 = +0.039 with no peers) plus an inter-agent assimilation
+component debate adds on top (+0.049, with the answer-consensus
+collapse 𝜅¯ → 0.997 a lone agent cannot produce). Only the latter is
+debate-specific.
+Because 𝐺𝑇 = 𝐶𝑇 − 𝐴𝑇 and 𝑅 = 1 − 𝐴𝑇 share 𝐴𝑇 , a high
+𝑅 2 is partly structural; the non-mechanical content is that confidence is nearly flat across tasks. Algebraically the slope equals
+1 − slope(𝐶𝑇 on 𝐴𝑇 ) = 1 − 0.18 = 0.82: a unit of accuracy moves
+𝐶𝑇 by only 0.18, and Var(𝐶𝑇 ) is 17× smaller than Var(𝐴𝑇 ) (∼ 250×
+on qwen-flash): the near-constancy of Theorem 4.1. The sharpest
+b = 𝑅 − 𝜀¯ from a single shared
+test is parameter-free: predicting 𝐺
+constant 𝜀¯ = 0.037 (no fitted slope) achieves lower out-of-sample
+error than the fitted relation (RMSE 0.010 vs. 0.022 on qwen-flash,
+0.024 vs. 0.034 on GLM-5.1), because the shortfall is so nearly constant (across-condition SD 0.028/0.010/0.018) that a fitted slope
+only adds transfer error. The post-collapse gap thus carries no task
+information beyond the residual, one number suffices across three
+independent model families, and the sub-unit slope is read as the
+measured shortfall 𝜀, not a transferable predictor.
+
+Additional experimental results
+
+This appendix collects the per-condition figures, the full component
+analyses, and the generalization tables summarized in Section 7; all
+15
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+Table 5: All thirty conditions (𝑇 =8 final turn), two rows per task (coop/adv): initial/final accuracy 𝐴1, 𝐴𝑇 , accuracy change Δ𝐴,
+final confidence 𝐶𝑇 , overconfidence gap 𝐺𝑇 , and calibration change ΔECE.
+Task
+abstract algebra
+ARC-Challenge
+college chem
+college math
+college physics
+econometrics
+formal logic
+global facts
+hs physics
+marketing
+moral scenarios
+prof. law
+prof. medicine
+TruthfulQA
+virology
+
+Role
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+
+𝑨1
+0.81
+0.92
+0.94
+0.95
+0.72
+0.72
+0.71
+0.84
+0.89
+0.96
+0.83
+0.86
+0.78
+0.88
+0.70
+0.72
+0.88
+0.91
+0.97
+0.97
+0.84
+0.80
+0.61
+0.70
+0.80
+0.95
+0.85
+0.84
+0.57
+0.58
+
+𝑨𝑻
+0.92
+0.94
+0.95
+0.95
+0.76
+0.77
+0.95
+0.95
+0.99
+0.96
+0.88
+0.85
+0.94
+0.93
+0.69
+0.72
+0.95
+0.93
+0.96
+0.97
+0.81
+0.79
+0.74
+0.73
+0.96
+0.95
+0.88
+0.86
+0.59
+0.57
+
+𝚫𝑨
++0.11
++0.02
++0.01
+−0.00
++0.04
++0.05
++0.24
++0.11
++0.09
++0.01
++0.04
+−0.02
++0.16
++0.05
+−0.01
++0.00
++0.07
++0.02
+−0.01
++0.00
+−0.03
+−0.00
++0.12
++0.03
++0.15
++0.00
++0.03
++0.02
++0.01
+−0.01
+
+𝑪𝑻
+0.99
+0.99
+0.98
+0.97
+0.97
+0.98
+0.99
+0.99
+0.99
+0.99
+0.97
+0.96
+1.00
+0.99
+0.91
+0.90
+0.99
+0.98
+0.98
+0.97
+0.97
+0.95
+0.91
+0.92
+0.95
+0.95
+0.96
+0.94
+0.93
+0.94
+
+𝑮𝑻
+0.07
+0.05
+0.03
+0.02
+0.21
+0.20
+0.04
+0.04
+0.00
+0.03
+0.09
+0.12
+0.05
+0.06
+0.22
+0.18
+0.04
+0.05
+0.02
+−0.00
+0.17
+0.15
+0.17
+0.18
+−0.00
+−0.01
+0.08
+0.08
+0.34
+0.37
+
+𝚫ECE
+−0.05
+−0.00
++0.02
+−0.12
++0.04
++0.04
+−0.10
+−0.04
+−0.05
+−0.00
++0.02
++0.09
+−0.06
++0.03
++0.08
++0.12
+−0.02
++0.01
+−0.09
+−0.22
++0.11
++0.14
+−0.00
++0.07
+−0.13
+−0.05
++0.03
++0.02
++0.10
++0.16
+
+Table 6: GLM-5.1 (third model family), all sixteen conditions (𝑇 =8 final turn); columns as in Table 5.
+Task
+virology
+global facts
+prof. law
+college chem
+moral scenarios
+econometrics
+formal logic
+hs physics
+
+E.3
+
+Role
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+
+𝑨1
+0.54
+0.55
+0.70
+0.69
+0.75
+0.70
+0.71
+0.75
+0.86
+0.86
+0.86
+0.88
+0.94
+0.91
+0.91
+0.96
+
+𝑨𝑻
+0.50
+0.53
+0.70
+0.71
+0.76
+0.72
+0.74
+0.76
+0.86
+0.84
+0.89
+0.88
+0.96
+0.96
+0.97
+0.97
+
+Per-domain conformal comparison (Certify)
+
+𝚫𝑨
+−0.04
+−0.03
++0.00
++0.03
++0.01
++0.03
++0.03
++0.01
++0.00
+−0.03
++0.02
++0.00
++0.03
++0.05
++0.06
++0.01
+
+𝑪𝑻
+0.97
+0.97
+0.96
+0.93
+0.98
+0.96
+0.99
+0.99
+0.99
+0.98
+0.99
+0.99
+1.00
+1.00
+0.99
+0.99
+
+𝑮𝑻
+0.47
+0.44
+0.26
+0.22
+0.21
+0.24
+0.25
+0.23
+0.12
+0.15
+0.10
+0.12
+0.04
+0.04
+0.02
+0.02
+
+𝚫ECE
++0.05
++0.05
++0.01
++0.02
++0.02
++0.01
+−0.01
++0.02
++0.00
++0.03
+−0.01
++0.02
+−0.02
+−0.04
+−0.03
+−0.00
+
+the time, whereas Affirm holds miscoverage ≤ 𝛼: on professional
+law it cuts the confident-error rate from 0.18–0.19 to 0.07 with
+still-informative sets (mean size 1.7–2.6), and on moral scenarios
+it drives miscoverage to 0 by abstaining (returning the full option
+
+Table 8 compares Affirm against fixed-𝑇 and agreement/confidence
+stopping (test split, 𝛼 = 0.1). On the hard domains (𝑅∞ ≫ 𝛼),
+agreement stopping commits a confident wrong answer 18–23% of
+16
+
+When Consensus Is Not Correctness
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Table 7: Team-size robustness (cooperative debate, 𝑇 =8): final accuracy 𝐴𝑇 , confidence 𝐶𝑇 , overconfidence gap 𝐺𝑇 , and residual
+𝑅 = 1 − 𝐴𝑇 at 𝑁 ∈ {3, 5, 7} (𝑁 =3 uses the full-subject question set, 𝑁 ∈ {5, 7} a matched 80-item subset).
+Domain
+virology
+
+prof. law
+
+college math
+
+hs physics
+
+𝑵
+3
+5
+7
+3
+5
+7
+3
+5
+7
+3
+5
+7
+
+𝑸
+166
+80
+80
+250
+80
+80
+100
+80
+80
+151
+80
+80
+
+𝑨𝑻
+0.59
+0.55
+0.53
+0.74
+0.80
+0.80
+0.95
+0.95
+0.97
+0.95
+0.98
+0.98
+
+set), the correct response when the model cannot discriminate,
+while also stopping far earlier than fixed-𝑇 (1–4 vs. 8 turns). On
+the easy domains it matches the baselines, mildly over-covering
+(empirical coverage 0.96–0.99 vs. nominal 0.90, from finite-sample
+discreteness); the safety advantage is confined to 𝑅∞ > 𝛼 as predicted, with an empirical safety gap of +0.11–+0.23 matching the
+𝑅∞ −𝛼 separation of Corollary 5.6. The guarantee is model-agnostic
+(marginal coverage averages 0.964 (deepseek-v4-flash) and 0.961
+(qwen-flash), both ≥ 1 − 𝛼) whereas agreement stopping incurs
+miscoverage equal to the residual, up to 0.43–0.47 on the hardest
+domains. Because Affirm never reads the agreement signal, the
+diversity collapse that corrupts the consensus heuristic leaves its
+coverage untouched.
+
+𝑮𝑻
+0.34
+0.39
+0.42
+0.17
+0.12
+0.11
+0.04
+0.04
+0.02
+0.04
+0.01
+0.01
+
+𝑹
+0.41
+0.45
+0.47
+0.26
+0.20
+0.20
+0.05
+0.05
+0.03
+0.05
+0.02
+0.02
+
+The cross-model picture exposes the method’s predicted boundary (Table 2, Figure 5, right). Trained on deepseek and deployed
+label-free on the matched qwen-flash grid, Deliberation raises AUROC from 0.728 to 0.770 (24/34 conditions) and 70%-coverage accuracy from 0.878 to 0.910; restricting both models to a single replicate
+(three votes/turn) widens the edge to +0.058 AUROC (27/34), ruling out a vote-count explanation. On GLM-5.1 Deliberation does
+not help (AUROC 0.807 vs. 0.840, 3/16): the predicted limit, not a
+failure; GLM’s confidence still ranks correctness (0.84), so there is
+no broken signal to repair. Deliberation is thus a theory-grounded
+Detect lever for the saturated-confidence regime, with the Certify
+guarantee holding regardless of tier.
+
+E.5
+E.4
+
+𝑪𝑻
+0.93
+0.94
+0.94
+0.91
+0.92
+0.91
+0.99
+0.99
+0.99
+0.99
+0.99
+0.99
+
+Consensus speed and Deliberation-Speed
+Trust (Detect)
+
+Verdict-Sequestered Debate (Prevent) and
+the counterfactual injection
+
+We compare Sequester (Definition 5.1) against standard debate on
+six domains × both roles, matched questions (Figure 6). Three findings. (i) Accuracy is preserved everywhere (mean change +0.007; the
+scatter sits on or above the diagonal). (ii) The calibration repair is a
+clean double dissociation by role: under cooperative roles Sequester
+sharply reduces overconfidence (mean ΔECE = −0.046; moral scenarios 0.169 → 0.050, abstract algebra 0.075 → 0.019, TruthfulQA
+0.088 → 0.046), but under adversarial roles it barely moves (mean
+−0.010). (iii) The mechanism is not simple answer-copying: answer
+consensus 𝜅¯ stays saturated under ablation in every regime, and
+the counterfactual injection below shows visible verdicts steer a
+panel most under adversarial roles, the regime where Sequester
+helps least. We therefore read Sequester not as localizing overconfidence to an answer channel but as a conditional protocol regularizer
+that removes one high-risk visible-verdict exposure at no accuracy
+cost; role design (Theorem 4.5) is the complementary lever for the
+adversarial regime, and the conformal certificate the universal one.
+The effect is regime-dependent rather than channel-localizing:
+on qwen-flash the cooperative gain vanishes (ΔECE = +0.010 vs.
+−0.046 on deepseek), matching deepseek’s adversarial roles. Answer consensus 𝜅¯ stays saturated under ablation in every regime
+(including cooperative deepseek, where Sequester does help) and
+the per-cell correlation between Δ¯
+𝜅 and the calibration gain is insignificant (𝑟 = −0.39, 𝑝 = 0.21), so the regimes are separated
+by the calibration outcome, not a measurable break in consensus.
+
+The theory has a sharp label-free corollary: a consensus reached
+immediately reflects genuine agreement, whereas one the panel is
+slowly argued into reflects assimilation under pressure, so correctness should fall as the number of turns needed to reach consensus
+grows. It does, steeply and near-monotonically: pooling all 𝑛=6458
+instances, the probability the panel’s committed answer is correct
+drops from 0.94 when consensus is immediate to 0.55 (near chance)
+when it takes seven turns (Figure 4). “How long the panel argued
+before agreeing” is a correctness signal hidden inside the trajectory, and it is precisely the slow, forced consensus that the Detect
+intervention targets.
+The finding is the basis of a deployable method. Fitting the Deliberation head (Definition 5.2) and pooling over all deepseek-v4-fla
+sh conditions (19 tasks × 2 roles; 𝑛=6458 questions), it raises the
+correctness-ranking AUROC from confidence’s 0.756 to 0.793 and
+lowers selective error at every coverage (Figure 5, left; accuracy
+at 70% coverage 0.943 → 0.952). The gain is concentrated where
+Corollary 4.2 bites: within the hard domains confidence ranks correctness near chance (AUROC 0.49 virology, 0.58 abstract algebra),
+while Deliberation, reading chiefly the consensus speed, recovers
+real discrimination. It also transfers: trained on the other domains
+and deployed label-free on a held-out domain it beats confidence in
+14/19 domains, with the largest gains where confidence collapses
+(GSM8K 0.49 → 0.80, TriviaQA 0.67 → 0.83).
+17
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+Table 8: Method comparison (test split, 𝛼 = 0.1): miscoverage P[truth excluded], Affirm mean set size, and turns run, per domain
+and role.
+
+1.0
+
+Role
+
+𝑹∞
+(miscov)
+
+fixed-𝑇
+miscov
+
+coop
+adv
+
+0.21
+0.23
+
+0.21
+0.23
+
+coop
+adv
+
+0.18
+0.19
+
+0.18
+0.19
+
+coop
+adv
+
+0.05
+0.08
+
+0.05
+0.08
+
+coop
+adv
+
+0.05
+0.07
+
+0.05
+0.07
+
+coop
+adv
+
+0.03
+0.02
+
+0.03
+0.02
+
+agreement
+miscov
+moral scenarios
+0.21
+0.23
+prof. law
+0.18
+0.19
+formal logic
+0.06
+0.08
+hs physics
+0.07
+0.07
+prof. medicine
+0.03
+0.02
+
+Affirm
+|𝑠𝑒𝑡 |/turns
+
+miscov
+0.00
+0.00
+
+4.0 / 1
+4.0 / 1
+
+0.07
+0.07
+
+2.6 / 1
+1.7 / 1
+
+0.06
+0.05
+
+1.0 / 3
+1.1 / 2
+
+0.08
+0.08
+
+1.0 / 2
+1.0 / 2
+
+0.07
+0.02
+
+1.0 / 4
+1.0 / 1
+
+1.0
+
+4328
+755
+531
+
+0.9
+
+190
+57
+
+22
+33
+
+0.6
+
+confidence / accuracy
+
+ℙ(answer correct)
+
+0.8
+
+542
+
+0.4
+chance (1/4)
+
+0.8
+
+0.7
+
+0.6
+overconfidence gap
+final confidence
+accuracy
+
+0.2
+0.5
+0.0
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+0
+
+turns to reach consensus
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+turns to reach consensus
+
+a
+
+b
+
+Figure 4: Consensus speed and correctness (𝑛=6458, all conditions): (a) P(answer correct) versus the number of turns to reach
+consensus (bar labels are instance counts), and (b) final confidence and the overconfidence gap (shaded) versus turns to
+consensus.
+A counterfactual-answer injection (rewriting peers’ committed answer to a fixed wrong option at high confidence, reasoning kept;
+three MMLU domains, 𝑁 =3, 𝑇 =8) confirms visible verdicts are
+causally potent: adoption of the planted answer rises by +0.25
+(coop) and +0.66 (adv) on deepseek and +0.29 (coop) on qwen, with
+the panel then 0.8–0.96 confident in the wrong answer. But steering
+is strongest under adversarial roles and weakest under cooperative
+deepseek, the regime where Sequester helps most (these roles are
+instructed to defer to confident peers, so the ordering is partly
+built in). We therefore retire the “cooperative herds by copying
+the answer” reading: the committed-answer channel is causally
+real but its pull tracks role design, not the calibration-gain pattern,
+
+and why Sequester restores cooperative calibration without lowering 𝜅¯ remains open. The conformal guarantee, which never reads
+agreement, is unaffected: coverage holds on all five model families
+(mean 0.961 qwen-flash, 0.992 GLM-5.1, ≈ 1.00 Llama-3.3-70B
+and GPT-4o-mini).
+
+E.6
+
+Generalization: new task types and
+free-form generation
+
+Beyond the knowledge/science multiple-choice tasks, we add two
+further task types, logical reasoning (ReClor) and commonsense
+(CommonsenseQA, recast to four options), under the identical protocol, to check that the mechanism holds outside factual recall
+18
+
+When Consensus Is Not Correctness
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+1.0
+0.12
+
+Deliberation AUROC (per condition)
+
+self-reported confidence
+consensus-speed only
+Deliberation (trajectory trust)
+
+selective error
+
+0.10
+
+0.08
+
+0.06
+
+0.04
+
+0.02
+
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+
+deepseek (within, CV)
+qwen (deepseek-trained)
+
+confidence broken
+
+0.3
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.3
+
+0.4
+
+coverage (fraction answered)
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1.0
+
+confidence AUROC (per condition)
+
+a
+
+b
+
+Figure 5: Deliberation-Speed Trust (Detect). Left: risk–coverage on deepseek-v4-flash for the Deliberation score, self-reported
+confidence, and a consensus-speed-only signal. Right: per-condition correctness-ranking AUROC, confidence (𝑥) vs. Deliberation
+(𝑦), for deepseek (within-model CV, circles) and qwen-flash (deepseek-trained, label-free transfer, triangles).
+1.0
+standard debate
+Sequester
+
+0.175
+
+cooperative
+adversarial
+
+0.9
+
+accuracy: Sequester
+
+0.150
+
+final ECE
+
+0.125
+0.100
+0.075
+0.050
+
+0.8
+
+0.7
+
+0.6
+0.025
+0.000
+
+0.5
+0.5
+
+p
+dv oop adv oop adv oop adv oop adv oop
+oo
+-a
+c
+c
+c
+c
+c
+Al-c law
+A- ogic gic- med ed- ebra brawQ
+or
+ra
+Q
+la
+l
+ul
+o
+m
+m
+e
+lo
+lg
+ul
+hf
+m
+f
+g
+t
+a
+l
+h
+u
+a
+ut
+Tr
+Tr
+dv
+
+-a
+al
+
+a
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1.0
+
+accuracy: standard debate
+
+b
+
+Figure 6: Verdict-Sequestered Debate (Sequester) vs. standard debate, six domains × two roles, matched questions: Left: final
+ECE; Right: accuracy (green cooperative, red adversarial).
+To rule out a fixed-option artifact, we run two free-form benchmarks under the identical protocol on both models (GSM8K (numeric) and TriviaQA (open-domain, short-text), the free-form tasks
+of Du et al. [11] and the self-consistency line [48]) with agents
+emitting a free answer string (numeric/exact match) instead of a
+letter. The predictions hold (Table 10): confidence still saturates
+(𝐶𝑇 ∈ [0.96, 1.00] over all eight conditions) while accuracy spans
+[0.75, 0.99], so the answer-consensus collapse (¯
+𝜅 (𝑇 ) ≥ 0.996) reaches
+numeric and textual answers alike, and the gap again tracks the
+residual, tiny on GSM8K (𝐺𝑇 ≈ 0.01–0.03) and large on TriviaQA
+
+(Table 9). ReClor is high-accuracy with a small residual, so confidence saturates (𝐶𝑇 ≈ 0.95) and the overconfidence gap is near
+zero (𝐺𝑇 ≤ 0.02), with Sequester neutral; CommonsenseQA carries
+a larger residual and a correspondingly larger gap (𝐺𝑇 = 0.08–
+0.10), and Sequester removes part of it under cooperative roles
+(ΔECE = −0.06). All four conditions fall on the same gap-vs-residual
+line, so the mechanism is not specific to factual-recall multiple
+choice.
+
+19
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+Dai
+
+Table 9: New task types, ReClor (logical reasoning) and CommonsenseQA (commonsense), on deepseek-v4-flash: same
+protocol and columns as Table 5, plus the Sequester ΔECE.
+
+Role
+
+𝑨1
+
+𝑨𝑻
+
+coop
+adv
+
+0.88
+0.93
+
+0.94
+0.94
+
+coop
+adv
+
+0.85
+0.85
+
+0.86
+0.84
+
+𝚫𝑨
+𝑪𝑻
+𝑮𝑻
+ReClor (logic)
++0.05 0.96 +0.02
++0.01 0.95 +0.01
+CommonsenseQA
++0.01 0.94 +0.08
+−0.02 0.94 +0.10
+
+agreement signal, would return a calibrated answer set rather than
+commit to the wrong A. Such confident flips are not anecdotal:
+they recur across the hard adversarial conditions (e.g. nine in moral
+scenarios, five in professional law).
+
+𝚫ECE
+
+Sequester
+𝚫ECE
+
+−0.05
+−0.10
+
++0.00
++0.02
+
+All checks below are recomputed from the logged per-turn answer/confidence arrays; none requires new model calls.
+
++0.06
++0.02
+
+−0.06
+−0.04
+
+Calibration-metric robustness (binning and proper scoring). The
+overconfidence gaps and the Sequester effect are not artifacts of the
+10-bin ECE. Recomputing the gap on the hard cells at {5, 10, 15, 20}
+equal-width bins and at equal-mass (adaptive) bins changes the
+value by ≤ 0.004 (e.g. moral scenarios 0.169 at every bin count;
+virology 0.370), and the binning-free Brier score tells the same
+story (moral 0.173, virology 0.377): confidence is so compressed into
+[0.9, 1.0] that the gap is bin-insensitive. The cooperative Sequester
+effect keeps its sign across all bin counts (ΔECEcoop from −0.055 at
+5 bins to −0.028 at 20 bins).
+
+F
+
+Table 10: Free-form tasks (GSM8K numeric math, TriviaQA
+open-domain QA; both models, 𝑇 =8, 𝑄=200 each): accuracy
+𝐴𝑇 , confidence 𝐶𝑇 , gap 𝐺𝑇 , residual 𝑅, the Sequester ΔECE,
+and split-conformal coverage.
+
+Task
+
+GSM8K
+TriviaQA
+
+GSM8K
+TriviaQA
+
+Role
+coop
+adv
+coop
+adv
+coop
+adv
+coop
+adv
+
+𝑨𝑻 𝑪𝑻
+𝑮𝑻
+𝑹
+deepseek-v4-flash
+0.98 1.00 +0.01 0.02
+0.99 1.00 +0.01 0.01
+0.88 0.99 +0.10 0.12
+0.89 0.98 +0.09 0.11
+qwen-flash
+0.97 1.00 +0.03 0.03
+0.97 1.00 +0.03 0.03
+0.76 0.97 +0.21 0.24
+0.75 0.96 +0.21 0.25
+
+Sequester
+𝚫ECE
+
+cov
+
++0.00
++0.01
+−0.01
+−0.01
+
+0.96
+0.99
+0.91
+0.90
+
++0.01
+−0.00
++0.02
++0.04
+
+0.94
+0.94
+1.00
+1.00
+
+Consensus speed survives a within-task difficulty control. The
+pooled consensus-speed trend (correctness falls with turns-to-consensus)
+could in principle be driven by difficulty confounding (hard items
+both take longer to converge and are wrong more often). Controlling within task, fitting the slope of P(correct) on turns-toconsensus separately per domain, leaves the slope negative in 15/15
+tasks on both models (mean −0.046). Within a single hard domain
+the effect persists (virology: 0.63 → 0.55 from immediate to ≥ 5turn consensus), so the signal is not merely an across-task difficulty
+proxy.
+
+(𝐺𝑇 ≈ 0.21 at residual 0.24–0.25 for qwen-flash), on the same line
+as the multiple-choice grid. The Sequester regime-dependence persists: on the informative TriviaQA cells withholding the verdicts
+helps on deepseek (ΔECE = −0.01) but not qwen (+0.02–+0.04),
+while GSM8K is too easy (𝑅 ≤ 0.03) to matter. Split-conformal
+coverage holds throughout (0.90–1.00).
+
+E.7
+
+Robustness re-analyses
+
+Post-hoc recalibration. A natural baseline is to temperature-/Platt/isotonic-recalibrate the verbalized confidences. On a 50/50 withincondition split these do reduce held-out ECE on the hard cells
+(mean 0.23 → 0.05). The point is precisely that they require a
+labeled in-domain calibration set, which deployment lacks, and
+which the whole problem (telling a confident-wrong consensus
+from a confident-right one) denies us; Sequester (a label-free protocol change) and Affirm (a coverage certificate) do not. We therefore
+report recalibration as context, not as a baseline that Sequester or
+Affirm must beat on raw ECE.
+
+A further debate trajectory
+
+Beyond the body’s Cases A and B (Section 7.1), one further trajectory shows a Sequester (Prevent) repair on a real deepseek-v4-flash
+debate, with every agent’s committed answer per turn and the
+panel’s mean confidence 𝐶𝑡 (the gold option in bold).
+
+Affirm coverage under cross-domain shift. Affirm’s guarantee assumes calibration/test exchangeability, which holds within a task
+(our 50/50 split: mean coverage 0.98) but can break under distribution shift. Calibrating Affirm’s threshold on one domain and testing
+on a different one drops mean coverage to 0.89 (minimum 0.50 on
+the most mismatched pair). This quantifies limitation (v): under
+domain shift the split-conformal layer needs its weighted or online variants. The trivial fixes do not genuinely recover it: pooling
+or leave-one-domain-out calibration restores coverage to 1.00, but
+only by enlarging the conformal set toward the full option set (mean
+size → 4.0 of 4, vs. 3.25 for the within-domain split): over-coverage
+by abstention, not informative recovery. A non-trivial partial fix
+follows the theory: because the usable difficulty signal survives
+collapse only in the trajectory (Corollary 4.2), we run a Mondrian
+
+Case C Sequester (Prevent) repairs the error: cooperative, global facts
+# Q: about what % of the global population was literate in 1950? B=56%
+(gold)
+turn 𝑡
+1
+2
+3
+4
+5
+6
+7
+8
+standard ans
+A
+A
+A
+A
+A
+A
+A
+A
+standard 𝐶𝑡
+.87
+.93
+.95
+.95
+.95
+.95
+.95
+.95
+Sequester ans
+B
+B
+B
+B
+B
+B
+B
+B
+Sequester 𝐶𝑡
+.85
+.82
+.83
+.82
+.80
+.87
+.85
+.85
+# => withholding the committed-answer line flips the panel from
+confident-wrong A to correct B
+
+Together with the body’s Cases A and B, Case C traces the CMAD
+response to one failure mode. Deliberation (Detect) distrusts the
+slow consensus of Case A and trusts the fast one of Case B; Sequester (Prevent) removes the visible-verdict exposure that drives
+Case A and repairs Case C; and Affirm (Certify), never reading the
+20
+
+When Consensus Is Not Correctness
+
+Agentic AI Evaluation @ KDD ’26, August 9, 2026, Jeju, Republic of Korea
+
+1 − 𝛼 floor on the most mismatched pair, so genuine cross-domain
+coverage still needs reweighting by calibration-domain similarity
+(weighted/online conformal), which we leave to future work. Affirm’s informativeness (at its in-distribution operating point) is
+not trivial abstention: across the hard cells it returns singletons
+or small sets (mean size 1.7–2.6 on professional law) and reserves
+full-set abstention for the genuinely non-discriminable case (moral
+scenarios).
+
+conformal stratified by a label-free trajectory feature (turns-toconsensus, binned fast/medium/slow) taking a per-stratum threshold on the calibration domain and assigning each test instance to its
+stratum by the same feature. Over all ordered cross-domain pairs
+of the eight difficulty-spread domains this lifts mean coverage from
+the naive 0.93 to 0.95 and the worst-pair minimum from 0.52 to
+0.65 while keeping the sets informative (mean size 3.2, no larger than
+the within-domain 3.25 and far from the trivial 4.0): Pareto-better
+than both naive and pooled calibration. It does not restore the full
+
+21
+
+

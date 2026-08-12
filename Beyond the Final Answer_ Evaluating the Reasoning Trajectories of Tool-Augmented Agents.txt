@@ -1,0 +1,2585 @@
+Beyond the Final Answer: Evaluating the Reasoning Trajectories
+of Tool-Augmented Agents
+Wonjoong Kim
+
+Sangwu Park
+
+Yeonjun In
+
+KAIST
+Daejeon, Republic of Korea
+wjkim@kaist.ac.kr
+
+KAIST
+Daejeon, Republic of Korea
+sangwu.park@kaist.ac.kr
+
+KAIST
+Daejeon, Republic of Korea
+yeonjun.in@kaist.ac.kr
+
+Sein Kim
+
+Dongha Lee
+
+Chanyoung Park∗
+
+KAIST
+Daejeon, Republic of Korea
+rlatpdlsgns@kaist.ac.kr
+
+Yonsei University
+Seoul, Republic of Korea
+donalee@yonsei.ac.kr
+
+KAIST
+Daejeon, Republic of Korea
+cy.park@kaist.ac.kr
+
+what tasks an LLM agent can accomplish, the assessment of how it
+accomplishes them has been largely overlooked.
+Existing benchmarks predominantly rely on an Answer Match
+evaluation, which only verifies if the final output matches the
+ground-truth answer [10, 19, 20, 26, 32]. However, we argue that
+agents reporting the same accuracy may not necessarily possess the
+same level of performance. For instance, two agents might achieve
+the same accuracy, yet one may arrive at the solution efficiently
+in minimal steps, while the other might exhibit poor reasoning
+quality, such as engaging in redundant processes or generating
+hallucinations. Previous research has largely overlooked crucial
+attributes that an agent should possess; An agent should be able to
+construct an efficient reasoning trajectory, avoid hallucination, and
+demonstrate adaptivity by selecting alternative tools when a chosen one is outdated, version-incompatible, or otherwise unusable.
+Figure 1 shows cases where two agents arrive at the same result
+given the same task but through different trajectories, highlighting
+differences in efficiency, the presence of hallucination, and adaptivity of the agent. As this example illustrates, if we were to report
+only the final answer accuracy, the two agents would be considered
+of equal quality. However, an analysis of their trajectories reveals
+that this is not the case. Therefore, to reliably evaluate an agent’s
+performance, it is crucial to inspect the reasoning trajectory, not
+just the final answer.
+While human evaluators offer the most accurate method for
+evaluating an LLM’s trajectory, the increasing length and complexity of LLM responses have led to a growing reliance on LLMbased evaluators [2, 7, 11, 16, 18, 34]. However, a straightforward
+approach of using an LLM to evaluate an agent’s trajectory by
+comparing it with a ground-truth trajectory poses a new challenge:
+user requests can often be solved through multiple valid trajectories. For instance, a recent benchmark dataset [26] provides a
+single ground-truth trajectory for each user’s request, yet we observe that multiple, alternative valid trajectories exist for the same
+request. Consequently, evaluating an agent’s trajectory against a
+pre-defined, single ground-truth can negatively impact the accuracy of the assessment, but annotating every possible trajectory
+is prohibitively expensive. Therefore, we need an LLM evaluator
+that can assess trajectories without ground truth, but a simple LLM
+evaluator struggles to perform this task effectively, as studies have
+shown that their performance degrades when evaluating long and
+complex contexts [5, 14, 30].
+
+Abstract
+Although recent tool-augmented benchmarks involve complex requests, evaluation remains limited to answer matching, neglecting
+critical trajectory aspects like efficiency, hallucination, and adaptivity. The most straightforward method for evaluation is to compare
+an agent’s trajectory with the ground-truth, but annotating all
+valid ground-truth trajectories is prohibitively expensive. In this
+manner, we introduce TRACE, a reference-free framework for the
+multi-dimensional evaluation of tool-augmented LLMs. By incorporating an evidence bank which accumulates knowledge from
+preceding steps, TRACE assesses an agent’s reasoning trajectory
+effectively. To validate our framework, we develop a new metaevaluation dataset with diverse and flawed trajectories, each labeled with multi-faceted performance scores. Our results confirm
+that TRACE accurately evaluates complex trajectories even with
+small open-source LLMs. Furthermore, we apply our method to
+evaluate the trajectories that agents produce while solving toolaugmented tasks, presenting previously unreported observations
+and their corresponding insights.1
+
+Keywords
+Tool-use LLM, Evaluation, Multi-turn Agent
+
+1
+
+Introduction
+
+With the recent advancements in Large Language Models (LLMs)
+[1, 3, 33], there has been a surge of interest in tool-augmented agents
+that overcome their intrinsic limitations by leveraging external
+tools [8, 9, 15, 22, 23, 25, 28, 29, 31]. As this field rapidly evolves,
+various benchmark datasets have been introduced to measure agent
+performance. However, while extensive evaluation has focused on
+∗ Corresponding author.
+1 The complete source code for our proposed framework is available at https://github.
+
+com/wonjoong-kim/TRACE.
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than the
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, Jeju, Republic of Korea
+© 2026 Copyright held by the owner/author(s). Publication rights licensed to ACM.
+ACM ISBN 978-x-xxxx-xxxx-x/YYYY/MM
+https://doi.org/10.1145/nnnnnnn.nnnnnnn
+1
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task
+Question
+How much should I pay
+for the beer on the table
+according to the price
+on the menu?
+
+Thought
+
+Step 1
+
+Thought
+
+… image description tool …
+Let’s start by the first image
+
+Action
+Image Description (image_1)
+
+…
+
+Kim et al.
+
+Step 4
+
+Thought
+
+There are 2 Magna beers and
+each price are 6 …
+
+Since FastCalculator is not
+available, I will use Calculator
+
+Action
+
+Action
+
+FastCalculator (2 * 6)
+
+Calculator (2 * 6)
+
+Correct Answer: 12
+
+Output
+
+Output
+
+Output
+
+Given files
+image_1, image_2
+
+The image features a dining
+table with …
+
+This tool is not available now.
+consider other tools.
+
+12
+
+Adaptivity!
+
+Agent 1 Response: 12
+
+Thought
+
+Step 1
+
+Thought
+
+… image description tool …
+Let’s start by the first image
+
+Action
+Image Description (image_1)
+
+Step 5
+
+…
+
+Step 6
+
+Thought
+
+Step 7
+
+To get more information …
+Count how many water …
+
+There are 2 beers … the brands
+are Heineken …
+
+Action
+
+Action
+
+CountGivenObject (water bottle)
+
+Calculator (2 * 6)
+
+Output
+
+Output
+
+Output
+
+The image features a dining
+table with …
+
+1
+
+12
+
+Inefficient!
+
+Agent 2 Response: 12
+
+Hallucination!
+
+Figure 1: An example of agents returning the same answer through different trajectories given the same task.
+To address these issues, we propose Trajectory-based Reasoning
+Assessment and Comprehensive Evaluation, TRACE, a simple yet
+effective methodology for in-depth evaluation of a tool-augmented
+LLM agent’s reasoning trajectory. TRACE is a general and effective
+LLM-based evaluation framework capable of assessing whether an
+agent has followed a logically sound reasoning process. Incorporating an evidence bank, which accumulates knowledge gathered from
+each reasoning step, TRACE provides a comprehensive understanding of an agent’s performance beyond binary success or failure by
+holistically evaluating multi-dimensional metrics, i.e., efficiency,
+hallucination, and adaptivity.
+To validate our proposed methodology, we construct a dedicated
+dataset for meta-evaluation. We augment existing state-of-the-art
+tool-augmented agent benchmark datasets, GTA [26] and m&m’s
+[19], with diverse reasoning trajectories. These augmentations include cases of unnecessary tool use, hallucinations, and attempts to
+select alternative tools following an initial failure. Each augmented
+trajectory is then labeled with corresponding scores for inefficiency,
+hallucination, and adaptivity. Using this dataset, we demonstrate
+that our evaluation methodology accurately assesses each trajectory against these nuanced metrics even with small open-source
+LLMs.
+Lastly, we evaluate the trajectories returned by various realworld LLM agents on tool-augmented tasks using TRACE. We find
+that even agents previously reported to have similar accuracies in
+fact exhibit significant performance differences when their reasoning trajectories are examined. From this experiment, we present a
+range of observations and insights, briefly identify the causes of
+poor performance in tool-augmented agents, and propose potential
+future research directions for enhancing their capabilities.
+In summary, our main contributions are as follows:
+
+reasoning process without depending on a single ground-truth
+path, allowing for more flexible and realistic performance analysis
+even with small LLMs.
+• A comprehensive, multi-dimensional assessment methodology that evaluates an agent based on crucial yet often overlooked metrics (i.e., efficiency, hallucination, and adaptivity) offering a holistic view of the agent’s capabilities beyond final
+accuracy.
+• An in-depth analysis and actionable insights of current LLM
+agent performance on complex tool-use tasks, revealing key
+trends and suggesting concrete strategies for improving their
+reasoning and reliability.
+
+2 Related Works
+2.1 Tool-augmented LLM Agent
+The capabilities of LLMs have been significantly extended by integrating external tools, giving rise to tool-augmented agents [33].
+Foundational to this paradigm is the ability of LLMs to generate
+intermediate reasoning steps. Early work on Chain-of-Thought
+(CoT) prompting demonstrated that eliciting a series of intermediate steps could improve performance on complex reasoning tasks
+[13, 27]. Building directly on this, the ReAct framework [28] established a synergistic model where LLMs interleave reasoning traces
+(“thought”) with external tool interactions (“action”). This enables
+agents to plan, execute, and adjust their strategies to solve tasks
+dynamically.
+Following these seminal works, the field has seen an explosion
+of agents designed for diverse and complex applications. Some
+research has focused on enabling agents to master a vast array
+of tools. For instance, ToolLLM [22] demonstrated the ability to
+facilitate LLMs in using over 16,000 real-world APIs, showcasing
+remarkable generalization in tool use. Others have focused on creating specialized agents for specific domains that demand high
+
+• An effective and efficient trajectory-focused evaluation
+framework that assesses the logical soundness of an agent’s
+2
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+precision, such as mathematical problem-solving with TORA [9],
+medical task assistance with MMedAgent [15], and financial trading
+with multimodal foundation agents [31]. Concurrently, the scope
+of tool use has expanded into the multi-modal domain, with models like MLLM-Tool [25] and other vision-language model-driven
+agents that can interpret and act upon visual information [8]. As
+complexity has grown, efforts have also been made to improve the
+efficiency of tool interaction itself, through methods like providing
+concise tool instructions [29] or enabling models to self-improve
+tool documentation [23].
+
+2.2
+
+3.1
+
+Preliminaries: Formalizing an Agent’s
+Trajectory
+
+A tool-augmented LLM agent interacts with external tools to solve
+a given user query, Q. The entire process of solving Q is captured as
+a trajectory, T , which is an ordered sequence of steps. We formally
+define a trajectory as: T = (𝑠 1, 𝑠 2, ..., 𝑠𝑛 ) where 𝑠𝑡 represents the 𝑡-th
+step in the reasoning process, and 𝑠𝑛 is the final step where the agent
+produces the final answer. Each individual step 𝑠𝑡 for 𝑡 ∈ [1, 𝑛 − 1]
+is a tuple composed of four elements generated sequentially within
+the ReAct loop 𝑠𝑡 = (𝑡ℎ𝑡 , 𝑎𝑡 , 𝑖𝑡 , 𝑜𝑡 ) where:
+• 𝑡ℎ𝑡 : The thought generated by the agent. This is a textual rationale
+where the agent analyzes the current state and decides on the
+subsequent action.
+• 𝑎𝑡 : The action selected by the agent, which corresponds to choosing a specific tool from a predefined set of available tools, A.
+• 𝑖𝑡 : The action input, which are the arguments or parameters
+passed to the selected tool 𝑎𝑡 .
+• 𝑜𝑡 : The observation, which is the output returned by the external
+tool after executing 𝑎𝑡 with input 𝑖𝑡 . This observation serves as
+the context for the next step, 𝑠𝑡 +1 .
+
+Evaluation of Tool-Augmented Agents
+
+The rapid development of complex, multi-step agents necessitates
+robust and comprehensive evaluation benchmarks. A number of
+benchmarks have been proposed to assess agent capabilities across
+different tasks. For example, GAIA [20] was designed to test general
+AI assistants on challenging real-world questions, while MetaTool
+[10] specifically focuses on the agent’s ability to decide whether to
+use a tool and which tool to select from a given set.
+However, a significant limitation of many existing benchmarks is
+their reliance on the accuracy of the final answer as the primary metric.
+Benchmarks such as GTA [26] and m&m’s [19], for instance, are
+constrained by primarily validating an agent’s trajectory against
+a single, pre-defined ground-truth sequence. This approach not
+only penalizes agents that discover alternative, valid solution paths
+but also scales poorly as tool complexity increases, as manually
+enumerating all possible correct paths is computationally infeasible.
+Recognizing this insufficiency, recent work has begun to explore
+process-level evaluation. While this is a critical step forward, even
+notable diagnostic benchmarks tend to focus on a single dimension
+of agent behavior. For instance, ToolBEHonest [32] measures hallucination, and PIPA [12] proposes a more unified protocol to assess
+behaviors such as state consistency. A holistic evaluation that assesses a broader set of attributes defining a high-quality reasoning
+process—such as efficiency and adaptivity—remains a significant
+gap. A remaining challenge is that for a single task, multiple valid
+trajectories can exist, leading to score variance even among solutions of the same quality, especially with multiple inputs like
+images (Fig. 1).
+
+The final step, 𝑠𝑛 , concludes the trajectory and contains the final
+answer, 𝐴𝑛𝑠 𝑓 𝑖𝑛𝑎𝑙 , derived from the preceding steps.
+
+3.2
+
+The Evidence Bank
+
+The central component of the TRACE framework is the evidence
+bank, denoted as E. The evidence bank is a dynamically constructed
+knowledge base that stores the factual information gathered by
+the agent throughout its trajectory. It serves as the foundation
+for evaluating the logical consistency and efficiency of the agent’s
+reasoning process. We find that structurally specifying the relationship between inputs, tools, and their resulting outputs, and
+storing this information in the evidence bank is more effective for
+measuring efficiency and hallucination than simply providing the
+full, unstructured dialog to an LLM evaluator.
+At each step 𝑡 = 1, 2, 3..., the agent generates a new piece of
+evidence, 𝑒𝑡 , which is a tuple of the action taken, the input provided,
+and the resulting observation: 𝑒𝑡 = (𝑎𝑡 , 𝑖𝑡 , 𝑜𝑡 ), and this new evidence
+is then appended to the evidence bank. The state of the evidence
+bank at the end of step 𝑡, denoted E𝑡 , is the cumulative set of all
+Ð𝑡
+evidence collected up to that point: E𝑡 = {𝑒 1, 𝑒 2, ..., 𝑒𝑡 } = 𝑘=1
+{𝑒𝑘 }.
+This incrementally built bank provides a complete and objective
+record of the agent’s interaction with its environment, which is
+3 Proposed Methodology
+In this section, we introduce our proposed framework, TRACE (Trajectory-crucial for our ground-truth-free evaluation metrics.
+
+based Reasoning Assessment and Comprehensive Evaluation).
+TRACE is a simple yet effective evaluation framework designed to
+assess the reasoning capabilities of tool-augmented agents operating on the ReAct framework [28]. Unlike conventional metrics
+that primarily focus on final answer accuracy, TRACE provides a
+multi-faceted analysis of an agent’s performance by evaluating its
+entire reasoning trajectory across three critical dimensions: Efficiency, Hallucination, and Adaptivity. A key advantage of our
+framework is its ability to perform this comprehensive evaluation
+without reliance on pre-defined, ground-truth trajectories, which are
+often restrictive and expensive to create. The overall framework of
+TRACE is presented in Fig. 2.
+
+3.3
+
+Trajectory Evaluation Metrics
+
+TRACE evaluates an agent’s trajectory T using three distinct metrics (i.e., efficiency, hallucination, and adaptivity), each targeting a
+fundamental aspect of robust reasoning.
+Efficiency. An ideal agent should reach the correct answer through
+the most direct (shortest) path possible, without performing inefficient actions. TRACE measures efficiency by quantifying the
+amount of unnecessary evidence collected in the trajectory. This
+assessment is performed post-hoc, after the agent has successfully
+produced the final answer, 𝐴𝑛𝑠 𝑓 𝑖𝑛𝑎𝑙 . To achieve this, we employ
+an LLM evaluator, tasked with identifying the minimal subset of
+3
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Reasoning Trajectory
+
+Available/Unavailable Tool
+
+Kim et al.
+
+Efficient/Inefficient Evidence
+
+Step 1
+
+Step 2
+
+Step n-1
+
+Step n
+
+Thought
+
+Thought
+
+Thought
+
+Final Answer
+
+Action, Input
+
+Action, Input
+
+Action, Input
+
+-
+
+Tool Output
+
+Tool Output
+
+Tool Output
+
+-
+
+TRACE
+Evidence Extraction
+Action, Input
+Tool Output
+
+Evidence Bank
+
+Efficiency Assessment
+Evidence Bank
+Final Answer
+
+Evidence Bank
+
+Hallucination Detection
+
+Step 1
+
+Step 2
+
+Step n-1
+
+Step n
+
+Evidence 1
+
+Evidence 1
+Evidence 2
+
+Evidence 1
+Evidence 2
+...
+Evidence n-1
+
+Evidence 1
+Evidence 2
+...
+Evidence n-1
+Evidence n
+
+Evidence Bank
+Next Thought
+Adaptivity Measurement
+Tool output
+Next Thought
+
+Figure 2: Tool outputs are stored in the evidence bank, which is used to detect hallucinations in each thought and to assess
+trajectory efficiency after the final answer. Adaptivity is measured following the use of an unavailable tool.
+For the first step, the evidence bank E0 is emtpy, so the model detect
+the hallucination of the agent only depend on its thought 𝑡ℎ 1 . The
+hallucinations score in a trajectory T is the average of hallucination
+Í
+counts for each step: 𝐻 (T ) = 𝑛𝑡=1 𝐻 (𝑠𝑡 )/𝑛.
+In this paper, we define hallucination as occurring even when
+the model uses internal knowledge not present in the evidence bank
+to determine whether a tool-augmented LLM agent can select and
+utilize the appropriate tool for a given question following recent
+study [17].
+Adaptivity. Real-world scenarios are imperfect; tools can fail due
+to API changes, version incompatibilities, or other issues such as
+timeout error and rate-limiting error, and a robust agent should
+be able to adapt to such failures. TRACE measures adaptivity by
+evaluating the agent’s response to an unavailable tool, when an
+observation 𝑜𝑡 indicates a tool execution failure (e.g., returns an
+API error). Let F be the set of step indices where such failures
+occur, then we assess the subsequent step 𝑠𝑡 +1 for each 𝑡 ∈ F . The
+adaptivity score for a failure event at step 𝑡, 𝐴𝑑𝑝 (𝑠𝑡 ), is a binary
+value (1 for adaptive, 0 for non-adaptive) determined by an LLM
+evaluator. The agent is considered adaptive, 𝐴𝑑𝑝 (𝑠𝑡 +1 ) = 1, if its
+thought of the subsequent thought 𝑡ℎ𝑡 +1 acknowledges the failure
+and its action 𝑎𝑡 +1 represents a sensible alternative strategy. Otherwise, it is predicted as non-adaptive, 𝐴𝑑𝑝 (𝑠𝑡 +1 ) = 0. For instance,
+an adaptive agent might select a different tool with similar functionality or modify its approach to proceed without the failed tool,
+while a non-adaptive agent repeatedly tries the same failed tool
+or becomes stuck. The purpose of this metric metric is to assess
+whether the agent can utilize a different tool, regardless of the issue
+encountered, so the adaptivity metric remains valid and applicable
+to various issues.
+
+evidence by examining the final answer 𝐴𝑛𝑠 𝑓 𝑖𝑛𝑎𝑙 with the complete
+evidence bank E𝑛 . It then selects and retains only the subset of
+evidence that are essential for logically deducing the answer, and
+this minimal subset is denoted as E𝑚𝑖𝑛 ⊆ E𝑛 . The evidence not
+included in this minimal set is considered unnecessary, so the set of
+unnecessary evidence is denoted as E𝑢𝑛𝑛𝑒𝑐𝑒𝑠𝑠𝑎𝑟 𝑦 = E\E𝑚𝑖𝑛 . The efficiency score, Eff(T ), is then calculated as the ratio of the amount
+of necessary evidence to the total evidence collected:
+
+Eff(T ) =
+
+|E𝑢𝑛𝑛𝑒𝑐𝑒𝑠𝑠𝑎𝑟 𝑦 |
+|E𝑚𝑖𝑛 |
+=1−
+|E𝑛 |
+|E𝑛 |
+
+An efficiency score of 1 indicates a perfectly streamlined trajectory with no wasted steps, while a lower score signifies a less
+efficient reasoning process.
+While TRACE does not guarantee the derivation of the optimal
+solution (i.e., the answer obtained using the minimum number of
+tools across all possible paths), finding the optimal path without
+ground-truth (GT) supervision is an extremely hard problem, becoming an intractable task especially as the number of available
+tools increases. Consequently, instead of attempting to solve this
+intractable optimization problem, TRACE focuses on measuring
+efficiency by detecting unnecessary tools within the set of tools the
+agent chose to use.
+Hallucination. Hallucination in tool-augmented agents occurs
+when the agent’s internal thought process deviates from the established facts. TRACE identifies hallucinations by assessing whether
+an agent’s thought at a given step is logically derivable from the
+evidence collected so far.
+Specifically, for each step 𝑡, we evaluate the thought 𝑡ℎ𝑡 . A
+thought is considered a hallucination if it contains information
+or makes assumptions that cannot be substantiated by the contents
+of the evidence bank from the previous steps, E𝑡 −1 . We define a
+boolean validation function, IsGrounded(𝑡ℎ𝑡 , E𝑡 −1 ), which is instantiated using the LLM evaluator. A hallucination is detected if
+this function returns false. The prediction of hallucination for a
+single step, 𝐻 (𝑠𝑡 ), is defined as:
+(
+1 𝑖 𝑓 ¬ IsGrounded(𝑡ℎ𝑡 , E𝑡 −1 )
+𝐻 (𝑠𝑡 ) =
+0 𝑜𝑡ℎ𝑒𝑟𝑤𝑖𝑠𝑒
+
+4 Experiments: Meta-evaluation of TRACE
+4.1 Meta-GTA and Meta-m&m’s:
+Meta-Evaluation dataset
+To verify that TRACE accurately evaluates the trajectories returned
+by agents, we introduce a dataset for meta-evaluation, termed as
+such because its purpose is to evaluate the evaluation framework
+(TRACE) itself. We validate the effectiveness of TRACE by augmenting and labeling the latest multimodal tool-augmented agent
+4
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Table 1: Performance of a naive approach for evaluating reasoning trajectories (i.e., LLM-as-a-Judge) and TRACE on our
+meta-evaluation datasets, Meta-GTA and Meta-m&m’s.
+Meta-GTA
+
+Meta-m&m’s
+
+LLM-as-a-Judge
+
+TRACE
+
+Hallucination
+
+Adaptivity
+
+Efficiency
+
+Hallucination
+
+Adaptivity
+
+Efficiency
+
+Efficiency
+
+86.08
+81.45
+90.24
+76.55
+55.67
+
+89.68
+94.42
+94.68
+88.95
+89.59
+
+98.83
+97.95
+96.59
+98.23
+78.98
+
+94.64 (+8.56)
+94.24 (+12.79)
+94.09 (+3.85)
+90.03 (+13.48)
+70.46 (+14.79)
+
+95.21 (+5.53)
+95.40 (+0.98)
+94.69 (+0.01)
+95.97 (+7.02)
+93.78 (+4.19)
+
+99.63 (+0.8)
+97.03 (-0.92)
+96.91 (+0.32)
+98.30 (+0.07)
+85.28 (+6.3)
+
+86.08
+84.35
+88.13
+86.47
+44.61
+
+85.75 (-0.33)
+86.12 (+1.77)
+88.56 (+0.43)
+87.19 (+0.72)
+64.05 (+19.44)
+
+100
+
+benchmark datasets, GTA [26], and m&m’s [19]. GTA contains a
+small number of high-quality, human-curated samples, each including a single ground-truth trajectory with the actions, action inputs,
+and thoughts that an LLM should return. Based on GTA, we generate Meta-GTA by augmenting each ground-truth trajectory into
+multiple valid ground-truth trajectories, carefully considering the
+dependencies between tool orders. On top of these trajectories, we
+then strategically insert inefficient steps, hallucinatory thoughts,
+and adaptive actions following the selection of an unavailable tool,
+and annotate all steps with corresponding labels. To construct the
+Meta-m&m’s dataset, we first augment each ground-truth trajectory into a set of multiple valid ground-truth trajectories. After
+augmentation, we deliberately insert inefficiency steps and annotate them with the corresponding labels. Because the m&m’s dataset
+is structured for LLMs to generate all necessary actions at once
+without intermediate reasoning, we exclude hallucination and adaptivity steps A more detailed description of the dataset including
+creation and validation process is presented in Appendix A.
+For the Meta-GTA, the accuracy of TRACE for hallucination
+(𝐴𝑐𝑐 𝐻 ), efficiency (𝐴𝑐𝑐 𝐸 𝑓 𝑓 ), and adaptivity (𝐴𝑐𝑐 𝑎𝑑𝑝 ) is calculated
+as follows, using the labels in the data, 𝐻𝑙𝑎𝑏𝑒𝑙 (𝑠𝑡 ), 𝐼𝑙𝑎𝑏𝑒𝑙 (𝑠𝑡 ), and
+𝐴𝑑𝑝𝑙𝑎𝑏𝑒𝑙 (𝑠𝑡 ), respectively.
+
+Performance (%)
+
+90
+80
+70
+60
+50
+40 Claude
+
+20.0
+17.5
+15.0
+12.5
+10.0
+7.5
+5.0
+2.5
+GPT-4.1 o3-mini Llama-70B Llama-8B 0.0
+Efficiency
+Hallucination
+Adaptivity
+Time Taken (s)
+
+Figure 3: Time Efficiency Comparison of LLM Evaluators
+using TRACE on Meta-GTA dataset.
+We find that most LLM models can effectively evaluate the efficiency, hallucination, and adaptivity of tool-augmented agents
+without relying on ground-truth trajectories when using TRACE.
+Notably, this demonstrates that evaluation is sufficiently achievable
+with open-source models, avoiding the evaluation costs associated
+with large proprietary models. It is worth noting that the dataset
+was constructed by injecting unnecessary steps into efficient trajectories and then labeling them for TRACE to detect. If TRACE
+accurately identifies the inserted inefficient step, the remaining
+steps constitute the clean, efficient trajectory, and the accuracy
+metric is specifically designed to reward the identification of this
+intentionally inserted inefficient step. This effectiveness is attributed to TRACE’s framework, which utilizes the evidence bank. To
+validate the benefit of the evidence bank, we further test the LLMas-a-Judge method that evaluates entire trajectories without the
+evidence bank. In Table 1, we observe that TRACE achieves more
+accurate assessments across efficiency, hallucination, and adaptivity.
+Moreover, we observe performance improvements across all LLMs
+when using TRACE, the most significant gains were observed in
+the smaller open-source models. This result validates the effectiveness of the evidence bank, demonstrating that it enables accurate
+evaluation even with smaller, more efficient models.
+We also measure the average time required per query for each
+model to evaluate Meta-GTA to verify how efficiently we can
+evaluate agents using TRACE. Figure 3 highlights the efficiency
+advantage of Llama-3.3-70B. Although it performs on par with
+larger proprietary models (Table 1), its average evaluation time
+is reduced by as much as a factor of three. This indicates that
+TRACE not only enables accurate evaluation but also facilitates
+efficient assessment in terms of cost and time with smaller models,
+which becomes more significant when evaluating large data.
+
+𝑛
+
+1 ∑︁
+I(𝐻 (𝑠𝑡 ) = 𝐻𝑙𝑎𝑏𝑒𝑙 (𝑠𝑡 )),
+𝑛 𝑡 =1
+𝑛
+
+1 ∑︁
+I(𝐼 (𝑠𝑡 ) = 𝐼𝑙𝑎𝑏𝑒𝑙 (𝑠𝑡 ))
+𝑛 𝑡 =1
+1 ∑︁
+𝐴𝑐𝑐 𝑎𝑑𝑝 (T ) =
+I(𝐴𝑑𝑝 (𝑠𝑡 +1 ) = 𝐴𝑑𝑝𝑙𝑎𝑏𝑒𝑙 (𝑠𝑡 +1 ))
+|F |
+𝐴𝑐𝑐 𝐸 𝑓 𝑓 (T ) =
+
+𝑡∈F
+
+Due to the structure of the Meta-m&m’s dataset, where groundtruth labels consist of a complete sequence of actions without intermediate thought or reasoning, the efficiency accuracy for this
+dataset was determined as a binary score. A score of 1 was awarded
+if the predicted count of inefficient steps exactly matched the label;
+otherwise, the score was 0.
+
+4.2
+
+TRACE
+
+Efficiency
+Claude-Sonnet-4
+GPT-4.1
+o3-mini
+Llama-3.3-70B
+Llama-3.1-8B
+
+𝐴𝑐𝑐 𝐻 (T ) =
+
+LLM-as-a-Judge
+
+Time Taken (s)
+
+Models
+
+Meta-Evaluation Results
+
+The results of TRACE’s evaluation performance on our generated
+dataset are presented in Table 1. We conduct the experiments with
+various proprietary LLMs and open-source models of different sizes,
+also including reasoning models. Detailed description about experimental setting is available in Appendix A.3.
+5
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Table 2: Comparison between TRACE and PIPA for cases
+where multiple trajectories exist for the same query (MetaGTA).
+Models
+Claude-Sonnet-4
+GPT-4.1
+o3-mini
+Llama-3.3-70B
+Llama-3.1-8B
+
+TRACE
+
+PIPA
+
+98.68 ± 1.26
+96.91 ± 2.28
+95.48 ± 1.81
+94.32 ± 4.40
+79.10 ± 8.73
+
+77.31 ± 9.96
+84.04 ± 7.17
+89.76 ± 4.74
+83.28 ± 8.57
+24.94 ± 12.91
+
+consistency is similar to our efficiency metric, we can confirm that
+PIPA is also capable of detecting inefficient steps, but TRACE evaluates efficiency of the trajectory more precisely across all models.
+Notably, in the case of smaller models like Llama-8B, its accuracy
+drops sharply compared to TRACE. This result once again proves
+that the evidence bank, which is a core mechanism of our proposed
+method, enables the effective measurement of efficiency while PIPA
+relies on unrefined full dialog.
+
+5
+Table 3: Comparison between TRACE and PIPA for all trajectories in Meta-GTA.
+
+4.3
+
+Models
+
+TRACE
+
+PIPA
+
+Claude-Sonnet-4
+GPT-4.1
+o3-mini
+Llama-3.3-70B
+Llama-3.1-8B
+
+94.64
+94.24
+94.09
+90.03
+70.46
+
+84.46
+81.61
+80.06
+88.11
+41.20
+
+Kim et al.
+
+Evaluation of Tool-augmented LLM Agents
+with TRACE
+
+While existing research of tool-augmented benchmarks like the
+GTA dataset [26] have predominantly focused on final answer accuracy, this single metric can obscure crucial differences in the
+quality of the underlying reasoning. In this section, we go beyond
+this limitation by conducting experiments to evaluate not only the
+answer accuracy of various LLM agents but also the quality of their
+reasoning trajectories across three dimensions: efficiency, hallucination, and adaptivity. We aim to demonstrate that even agents with
+seemingly comparable accuracy can exhibit performance disparities
+when their reasoning processes are closely examined. Through this
+deeper analysis, we seek to identify common causes of agent failure
+and highlight the distinct characteristics of each model.
+
+Comparison with An Existing Trajectory
+Evaluation Method
+
+To validate the effectiveness of calculating efficiency through the
+evidence bank, we compare TRACE with an existing trajectory
+evaluation method. Because existing approaches do not directly
+assess efficiency, hallucination, and adaptivity, we adopt a baseline a method that evaluates trajectories from related perspectives.
+Specifically, PIPA [12] proposes a metric called state consistency, to
+measure the consistency between the previous and current state.
+Since the consistency score penalizes the use of unnecessary tools in
+executing a user’s query, we expect it to correlate with our efficiency
+metric.
+Robustness to multiple trajectories with multi inputs. Table 2 presents the robustness of evaluation for the efficiency of
+TRACE and the state consistency measured by PIPA. To verify
+whether our evaluation is robust even in the case where there
+exist multiple valid trajectories for solving a single task, we sample
+only those from the Meta-GTA dataset and calculate their efficiency,
+along with the standard deviation among them. Note that all of
+corresponding trajectories for a query are correct and efficient;
+they differ only in the sequence of tool calls. In this experiment,
+therefore, an ideal outcome is the efficiency score close to 100 with
+a standard deviation is close to 0.
+The results show that our proposed method measures efficiency
+more accurately while also having a lower standard deviation,
+demonstrating that our method consistently evaluate efficiency regardless of the specific trajectory taken. In the case of PIPA, which
+measures the consistency of the current state based on accumulated
+states, we observe that the consistency score decreases when the
+agent has to handle multiple input files provided with the query in
+parallel. In contrast, TRACE identifies evidence within the entire
+trajectory that is unnecessary for reaching the final answer. Consequently, the diversity among trajectories does not affect TRACE’s
+performance.
+Effectiveness of efficiency evaluation. We also provide the performance of evaluating trajectory efficiency in Table 3. Since state
+
+5.1
+
+Experimental Settings
+
+Our experimental setup involves diverse LLMs to serve as agents.
+This includes proprietary models and a range of open-source models
+of varying sizes, as well as reasoning model. The agents under evaluation are 1) Claude-Sonnet, 2) GPT-4.1, 3) o3-mini, 4) Llama
+70B, 5) Llama 8B, 6) Mixtral 8x7B, 7) Mistral 7B, 8) Qwen 72B,
+and 9) Qwen 7B, where the first three models are proprietary models. We task each of these agents with solving problems from the
+GTA [26] dataset, a recent and challenging benchmark featuring
+multimodal and multi-input queries.
+We employ our TRACE framework to conduct a fine-grained
+evaluation of each agent’s reasoning trajectory. For the evaluator models within TRACE, we select Claude-Sonnet, GPT-4.1,
+Llama 70B, and o3-mini, based on their strong performance in
+our meta-evaluation as shown in Table 1. These evaluators assess
+each agent’s trajectory across the three core dimensions: efficiency
+score, hallucination reduction score, and adaptivity score, where
+the efficiency of a trajectory is measured only on the condition that
+it produced the correct answer. To rigorously evaluate adaptivity,
+we augment the standard toolset in GTA, incorporating a set of fake
+tools with names syntactically similar to the original, valid tools.
+When an agent selects one of these fake tools, the environment
+returns an “unavailable tool" error message. This controlled-failure
+setup allows us to systematically observe whether the agent can
+flexibly select an alternative tool in its subsequent step.
+Beyond our TRACE framework, we conduct a more detailed
+analysis by incorporating additional metrics for instruction following and answer accuracy, adhering to the evaluation protocol
+established by the GTA benchmark [26]. We measure Instruction
+Error, which is divided into two categories: a non-existent tool
+selection and failing to provide arguments in the correct format for
+a chosen tool. We count each error and present its ratio relative to
+6
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+the total length of the trajectory. We also present Answer Accuracy depending on the query type. For multiple-choice questions
+(MCQ), we use binary accuracy, while we use cosine similarity of
+embeddings from All-MPNet-Base-V2 [24] for queries requiring a
+long-form textual response (LTR). For queries where the answer
+is an image (IMG), we measure the cosine similarity of arguments
+embeddings following the protocol of GTA [26]. We also report
+an Overall Accuracy, calculated as the micro-average across all
+individual samples (MCQ, LTR, and IMG) to accurately reflect the
+distribution of query types in the dataset.
+Feedback Mechanism. To ensure that trajectories are not prematurely terminated due to minor, recoverable errors, we implement a
+feedback mechanism. If an agent attempts to call a tool that is not
+in the provided toolset or uses an incorrect argument format, the
+environment provides specific feedback (i.e., “tool not in the list" or
+“tool execution error") instead of halting the process. This approach
+allows us to gather more comprehensive trajectories for analysis,
+preventing trivial mistakes from obscuring an agent’s broader reasoning capabilities. It is crucial to note that while this feedback
+allows the agent to proceed, the initial errors are still logged and
+counted towards the “non-existent tool selection" and “wrong argument format" metrics, respectively. More detailed experimental
+settings are available in Appendix B.
+Extension to Multi-Agent System. Thanks to its design as an
+widely applicable framework, TRACE can evaluate the trajectories
+of more sophisticated agents such as Multi-Agent Systems (MAS) in
+addition to standard ReAct-style agentic systems. TRACE enables
+assessment of both individual agent performance and overall system performance by constructing an evidence bank for each agent,
+verifying hallucinations in both the orchestrator and the agents
+at every step using all available evidence banks, and examining
+whether unnecessary evidence was used once the correct final answer is reached. To demonstrate the extensibility of TRACE across
+diverse datasets and agent types, we additionally showcase the efficiency and adaptivity of trajectories produced by the multi-agent
+system Magentic-One [6] on the state-of-the-art benchmark dataset
+GAIA [20], as presented in Appendix C.1.
+
+5.2
+
+are specific architectural features or helpful training methodologies
+to create effective tool-augmented agents. We believe this presents
+a valuable future direction for research aimed at developing more
+capable agents.
+Furthermore, powerful proprietary models have a very low instruction error rate, whereas open-source models, particularly smaller
+ones, exhibit higher error rates. This is likely because smaller models face greater difficulty in processing long-context instructions
+accurately. This implies that smaller models, when deployed as
+tool-augmented agents, would significantly benefit from an accompanying correction mechanism that validates tool selection and
+argument formatting.
+5.2.2 Analysis on the Three TRACE Metrics. Efficiency. We measure efficiency only for successful trajectories, that is, only when
+they lead to the correct final answer. The efficiency results largely
+follow the trends observed in overall accuracy. While larger models
+tend to construct more efficient trajectories, this is not always the
+case. A key insight from this analysis is that as an agent generates
+a more inefficient (i.e., longer) trajectory, its likelihood of producing an incorrect answer increases. We hypothesize this is because
+longer trajectories require the agent to process a longer context,
+which can weaken its ability to perform accurate reasoning. It is
+worth noting that Mistral-7B has no efficiency score, as it fails to
+produce any correct answers in our experiments. Further analysis
+of the efficiency of trajectories where the model failed to derive the
+correct answer is available in Appendix C.2
+Hallucination. The hallucination metric also shows a high correlation with overall accuracy, as a higher hallucination naturally
+reduces the probability of reaching a correct answer. Notably, the
+reasoning model, o3-mini, demonstrates a remarkably low hallucination rate. This is likely attributable to the inherent nature of Large
+Reasoning Models (LRMs) to perform deep reasoning [4, 21], focusing strictly on the accumulated evidence. In the case of Mistral-7B,
+we observe that it achieves a high score (i.e., a low rate of hallucination) not by successfully completing tasks, but by terminating
+its operation when it determines it cannot proceed.
+Adaptivity. Adaptivity is another metric directly linked to overall
+accuracy. To measure this, we test whether an agent can select a
+valid tool after an initial attempt to use a pre-defined, unavailable
+tool with a similar name. We find that GPT-4.1 and Qwen-72B,
+despite their high overall accuracy, exhibit a relatively low adaptivity score. This suggests that enhancing the ability to adapt to tool
+failures could be a key factor in further elevating their performance.
+In summary, leveraging TRACE enables a more in-depth evaluation of agents than was previously possible. For instance, if we
+only measure the Overall Score, as is common in other studies,
+the Qwen-72B, GPT-4.1, and o3-mini models would appear to have
+similar accuracy and thus be considered interchangeable. However,
+our results reveal that Qwen is more efficient than GPT-4.1 but
+shows higher hallucination rate. On the other hand, despite having
+almost no hallucinations, o3-mini struggles to continue its reasoning robustly after a tool-calling failure (low adaptability). Similarly,
+Llama-70B and Qwen-7B show comparable overall scores, yet they
+differ significantly in efficiency and adaptivity. A similar pattern is
+observed between Llama-8B and Mixtral-8x7B, which have similar
+overall scores but large gaps in efficiency and hallucination. This
+
+Experiment Results
+
+Comprehensive results of our experiments are summarized in Table
+4. Here, we provide a detailed analysis of these findings, focusing on
+overall performance, the three core TRACE metrics, and instruction
+following capabilities.
+5.2.1 Overall Performance Analysis. In terms of overall accuracy,
+proprietary models demonstrate the strongest performance as expected. However, their results in these specialized tool-augmented
+tasks suggest considerable room for improvement when compared
+to their powerful general-purpose capabilities.
+Among the open-source LLMs, a clear trend emerges within the
+same model family: larger models consistently outperform their
+smaller counterparts. However, across the entire open-source landscape, we observe that model size is not the sole determinant of
+success. Notably, the Qwen-7B model achieves remarkable performance, surpassing both Llama-3.3-70B and Mixtral-8x7B. Furthermore, Qwen-72B performs at a level comparable to proprietary
+models like Claude and GPT. This finding strongly implies that there
+7
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Kim et al.
+
+Table 4: Performance of LLM agents on GTA dataset. Avg. denotes average of performance from all evaluators, and Inst. denotes
+Instruction Error (non-existent tool selection / wrong argument format).
+Model
+
+Claude-Sonnet-4
+
+GPT-4.1
+
+o3-mini
+
+Evaluator
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Efficiency
+Hallucination
+Adaptivity
+
+0.9427
+0.9511
+0.9091
+
+0.9495
+0.9815
+0.9545
+
+0.9459
+0.9878
+0.8636
+
+0.9025
+0.9718
+0.7727
+
+0.9351
+0.9730
+0.8750
+
+0.9659
+0.9513
+0.7667
+
+0.9328
+0.9953
+0.8111
+
+0.9380
+0.9884
+0.8333
+
+0.8958
+0.9787
+0.8111
+
+0.9331
+0.9784
+0.8056
+
+0.9888
+0.9818
+0.5909
+
+0.9457
+0.9961
+0.6818
+
+0.9269
+0.9961
+0.6818
+
+0.8914
+1.0000
+0.5455
+
+0.9382
+0.9935
+0.6250
+
+Inst. ↓
+
+0.0029 / 0.0038
+
+0.0074 / 0.0093
+
+0.0083 / 0.0400
+
+Answer Accuracy
+
+0.5321 / 0.6607 / 0.6754
+
+0.4487 / 0.7208 / 0.6914
+
+0.4808 / 0.7320 / 0.5933
+
+Overall Accuracy
+
+0.5767
+
+0.5281
+
+0.5263
+
+Model
+
+Llama-3.3-70B
+
+Mixtral-8x7B
+
+Qwen-72B
+
+Evaluator
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Efficiency
+Hallucination
+Adaptivity
+
+0.8784
+0.8090
+0.8547
+
+0.7456
+0.9410
+0.9012
+
+0.7819
+0.9768
+0.9012
+
+0.7064
+0.9214
+0.8721
+
+0.7781
+0.9121
+0.8823
+
+0.7513
+0.8616
+0.5000
+
+0.7513
+0.9505
+0.6250
+
+0.7811
+0.9831
+0.5000
+
+0.6858
+0.9381
+0.6250
+
+0.7424
+0.9333
+0.5625
+
+0.9687
+0.9324
+0.7969
+
+0.9245
+0.9820
+0.7969
+
+0.9287
+0.9836
+0.7969
+
+0.9525
+0.9052
+0.7969
+
+0.9436
+0.9508
+0.7969
+
+Inst. ↓
+
+0.0738 / 0.0047
+
+0.091 / 0.061
+
+0.017 / 0.0021
+
+Answer Accuracy
+
+0.3205 / 0.3752 / 0.5191
+
+0.0109 / 0.6223 / 0.1822
+
+0.4359 / 0.7679 / 0.6815
+
+Overall Accuracy
+
+0.3738
+
+0.1631
+
+0.5202
+
+Model
+
+Llama-3.1-8B
+
+Mistral-7B
+
+Qwen-7B
+
+Evaluator
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Claude
+
+GPT
+
+Llama
+
+o3-mini
+
+Avg.
+
+Efficiency
+Hallucination
+Adaptivity
+
+0.5244
+0.6823
+0.5556
+
+0.7423
+0.8355
+0.5556
+
+0.5184
+0.9519
+0.5556
+
+0.4633
+0.8069
+0.5556
+
+0.5621
+0.8192
+0.5556
+
+0.9959
+0.0000
+
+1.0000
+0.0000
+
+1.0000
+0.0000
+
+1.0000
+0.0000
+
+0.9990
+0.0000
+
+0.8893
+0.8282
+0.8495
+
+0.9445
+0.9435
+0.8656
+
+0.9118
+0.9566
+0.8656
+
+0.8650
+0.9193
+0.8979
+
+0.9026
+0.9119
+0.8696
+
+Inst. ↓
+
+0.2397 / 0.0027
+
+0.0480 / 0.061
+
+0.1254 / 0.008
+
+Answer Accuracy
+
+0.0321 / 0.2699 / 0.6193
+
+0.0000 / 0.1890 / 0.0088
+
+0.2628 / 0.5944 / 0.6823
+
+Overall Accuracy
+
+0.1948
+
+0.0154
+
+0.3904
+
+Claude
+GPT Qwen 72B
+o3-mini
+
+0.6
+
+Overall accuracy
+
+0.5
+
+# of turns
+
+2
+
+6
+
+10
+
+Qwen 7B Llama 70B
+
+0.4
+
+of output tokens per query for each model on the GTA dataset.
+(Note: to standardize the output token count across all models, we
+exclude the reasoning tokens for o3-mini). With the exception of
+Mistral 7B, which produced few meaningful answers, we observe
+a general trend that models using more turns tend to have lower
+performance. This is because they often create inefficient trajectories with unnecessary steps, ultimately failing to arrive at the
+correct answer. Notably, we can also see a clear negative correlation between the number of output tokens and the overall accuracy.
+Exceeding the minimum number of tokens required for reasoning
+can introduce unnecessary information or noise, which directly
+degrades performance. This creates a longer context, a problem
+that becomes particularly significant for smaller models. This result suggests that for smaller, low-confidence models, limiting the
+token count, rather than allowing them to think more, can actually
+improve the performance of tool-augmented agents.
+
+Models
+
+Claude
+GPT
+o3-mini
+Llama 70B
+Llama 8B
+Mixtral 8x7B
+Mistral 7B
+Qwen 72B
+Qwen 7B
+
+0.3
+
+Llama 8B
+Mixtral 8x7B
+
+0.2
+0.1
+
+Mistral 7B
+0.0
+
+50
+
+75
+
+100 125 150 175 200 225 250
+
+# of used tokens
+
+Figure 4: Model accuracy based on the number of tokens used
+and dialogue turns.
+implies that the strategies required to enhance the performance
+of each model on tool-augmented tasks are distinct. Furthermore,
+it empowers users to select a model based on their specific priorities when building an agent; whether to prioritize higher efficiency,
+greater reliability, or more robust reasoning capabilities. For specific
+examples illustrating these points, please refer to the case studies
+in Appendix D.
+
+6
+
+Conclusion
+
+In this paper, we address the limitations of conventional evaluation
+methods for tool-augmented LLM agents, which predominantly
+focus on final answer accuracy while overlooking the crucial reasoning process. To overcome this, we introduced TRACE, a simple
+yet effective framework for the comprehensive evaluation of an
+agent’s reasoning trajectory. By operating without reliance on a
+single, pre-defined ground-truth path, TRACE offers a more realistic
+and scalable assessment across three critical dimensions: efficiency,
+hallucination, and adaptivity. Using TRACE allows for a more accurate understanding of the performance of tool-augmented agents,
+which helps in developing more effective agents.
+
+5.2.3 Quantitative Analysis of Token Consumption. In this section,
+we analyze token usage as a potential cause of performance degradation in tool-augmented agents. Figure 4 illustrates the overall
+accuracy, the average number of turns per query, where a turn corresponds to a reasoning step involving a tool call, and the number
+8
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+References
+
+[22] Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan, Yaxi Lu, Yankai Lin, Xin
+Cong, Xiangru Tang, Bill Qian, et al. 2024. Toolllm: Facilitating large language
+models to master 16000+ real-world apis. In International Conference on Learning
+Representations, Vol. 2024. 9695–9717.
+[23] Changle Qu, Sunhao Dai, Xiaochi Wei, Hengyi Cai, Shuaiqiang Wang, Dawei Yin,
+Jun Xu, and Ji-Rong Wen. 2025. From exploration to mastery: Enabling llms to
+master tools via self-driven interactions. In International Conference on Learning
+Representations, Vol. 2025. 55675–55697.
+[24] Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, and Tie-Yan Liu. 2020. Mpnet:
+Masked and permuted pre-training for language understanding. Advances in
+neural information processing systems 33 (2020), 16857–16867.
+[25] Chenyu Wang, Weixin Luo, Sixun Dong, Xiaohua Xuan, Zhengxin Li, Lin Ma,
+and Shenghua Gao. 2025. Mllm-tool: A multimodal large language model for tool
+agent learning. In 2025 IEEE/CVF Winter Conference on Applications of Computer
+Vision (WACV). IEEE, 6678–6687.
+[26] Jize Wang, Ma Zerun, Yining Li, Songyang Zhang, Cailian Chen, Kai Chen, and
+Xinyi Le. 2024. GTA: a benchmark for general tool agents. Advances in Neural
+Information Processing Systems 37 (2024), 75749–75790.
+[27] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi,
+Quoc V Le, Denny Zhou, et al. 2022. Chain-of-thought prompting elicits reasoning
+in large language models. Advances in neural information processing systems 35
+(2022), 24824–24837.
+[28] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan,
+and Yuan Cao. 2023. React: Synergizing reasoning and acting in language models.
+In International Conference on Learning Representations (ICLR).
+[29] Siyu Yuan, Kaitao Song, Jiangjie Chen, Xu Tan, Yongliang Shen, Kan Ren, Dongsheng Li, and Deqing Yang. 2025. Easytool: Enhancing llm-based agents with
+concise tool instruction. In Proceedings of the 2025 Conference of the Nations of
+the Americas Chapter of the Association for Computational Linguistics: Human
+Language Technologies (Volume 1: Long Papers). 951–972.
+[30] Shaokun Zhang, Ming Yin, Jieyu Zhang, Jiale Liu, Zhiguang Han, Jingyang Zhang,
+Beibin Li, Chi Wang, Huazheng Wang, Yiran Chen, et al. 2025. Which Agent
+Causes Task Failures and When? On Automated Failure Attribution of LLM
+Multi-Agent Systems. In International Conference on Machine Learning. PMLR,
+76583–76599.
+[31] Wentao Zhang, Lingxuan Zhao, Haochong Xia, Shuo Sun, Jiaze Sun, Molei Qin,
+Xinyi Li, Yuqing Zhao, Yilei Zhao, Xinyu Cai, et al. 2024. A multimodal foundation agent for financial trading: Tool-augmented, diversified, and generalist. In
+Proceedings of the 30th acm sigkdd conference on knowledge discovery and data
+mining. 4314–4325.
+[32] Yuxiang Zhang, Jing Chen, Junjie Wang, Yaxin Liu, Cheng Yang, Chufan Shi,
+Xinyu Zhu, Zihao Lin, Hanwen Wan, Yujiu Yang, et al. 2024. Toolbehonest: A
+multi-level hallucination diagnostic benchmark for tool-augmented large language models. In Proceedings of the 2024 Conference on Empirical Methods in
+Natural Language Processing. 11388–11422.
+[33] Wayne Xin Zhao, Kun Zhou, Junyi Li, Tianyi Tang, Xiaolei Wang, Yupeng Hou,
+Yingqian Min, Beichen Zhang, Junjie Zhang, Zican Dong, et al. 2023. A survey
+of large language models. arXiv preprint arXiv:2303.18223 1, 2 (2023).
+[34] Mingchen Zhuge, Changsheng Zhao, Dylan R Ashley, Wenyi Wang, Dmitrii
+Khizbullin, Yunyang Xiong, Zechun Liu, Ernie Chang, Raghuraman Krishnamoorthi, Yuandong Tian, et al. 2025. Agent-as-a-Judge: Evaluate Agents with Agents.
+In International Conference on Machine Learning. PMLR, 80569–80611.
+
+[1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal
+Anadkat, et al. 2023. Gpt-4 technical report. arXiv preprint arXiv:2303.08774
+(2023).
+[2] Yushi Bai, Jiahao Ying, Yixin Cao, Xin Lv, Yuze He, Xiaozhi Wang, Jifan Yu,
+Kaisheng Zeng, Yijia Xiao, Haozhe Lyu, et al. 2023. Benchmarking foundation
+models with language-model-as-an-examiner. Advances in Neural Information
+Processing Systems 36 (2023), 78142–78167.
+[3] Yupeng Chang, Xu Wang, Jindong Wang, Yuan Wu, Linyi Yang, Kaijie Zhu, Hao
+Chen, Xiaoyuan Yi, Cunxiang Wang, Yidong Wang, et al. 2024. A survey on
+evaluation of large language models. ACM transactions on intelligent systems and
+technology 15, 3 (2024), 1–45.
+[4] Qiguang Chen, Libo Qin, Jinhao Liu, Dengyun Peng, Jiannan Guan, Peng Wang,
+Mengkang Hu, Yuhang Zhou, Te Gao, and Wanxiang Che. 2025. Towards reasoning era: A survey of long chain-of-thought for reasoning large language models.
+arXiv preprint arXiv:2503.09567 (2025).
+[5] Payel Das, Soham Dan, Elliot Nelson, Subhajit Chaudhury, and Georgios Kollias.
+2024. Needle in the Haystack for Memory Based Large Language Models. In
+International Conference on Machine Learning.
+[6] Adam Fourney, Gagan Bansal, Hussein Mozannar, Cheng Tan, Eduardo Salinas,
+Friederike Niedtner, Grace Proebsting, Griffin Bassman, Jack Gerrits, Jacob Alber,
+et al. 2024. Magentic-one: A generalist multi-agent system for solving complex
+tasks. arXiv preprint arXiv:2411.04468 (2024).
+[7] Jinlan Fu, See Kiong Ng, Zhengbao Jiang, and Pengfei Liu. 2024. Gptscore: Evaluate as you desire. In Proceedings of the 2024 Conference of the North American
+Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers). 6556–6576.
+[8] Zhi Gao, Bofei Zhang, Pengxiang Li, Xiaojian Ma, Tao Yuan, Yue Fan, Yuwei
+Wu, Yunde Jia, Song-Chun Zhu, and Qing Li. 2025. Multi-modal agent tuning:
+Building a vlm-driven agent for efficient tool usage. In International Conference
+on Learning Representations, Vol. 2025. 13354–13385.
+[9] Zhibin Gou, Zhihong Shao, Yeyun Gong, Yujiu Yang, Minlie Huang, Nan Duan,
+Weizhu Chen, et al. 2024. Tora: A tool-integrated reasoning agent for mathematical problem solving. In International Conference on Learning Representations,
+Vol. 2024. 48362–48395.
+[10] Yue Huang, Jiawen Shi, Yuan Li, Chenrui Fan, Siyuan Wu, Qihui Zhang, Yixin
+Liu, Pan Zhou, Yao Wan, Neil Gong, et al. 2024. Metatool benchmark for large
+language models: Deciding whether to use tools and which to use. In International
+Conference on Learning Representations, Vol. 2024. 42978–43007.
+[11] Yeonjun In, Wonjoong Kim, Kanghoon Yoon, Sungchul Kim, Mehrab Tanjim,
+Kibum Kim, and Chanyoung Park. 2025. Is safety standard same for everyone? user-specific safety evaluation of large language models. arXiv preprint
+arXiv:2502.15086 (2025).
+[12] Takyoung Kim, Janvijay Singh, Shuhaib Mehri, Emre Can Acikgoz, Sagnik
+Mukherjee, Nimet Beyza Bozdag, Sumuk Shashidhar, Gokhan Tur, and Dilek
+Hakkani-Tür. 2025. Pipa: A unified evaluation protocol for diagnosing interactive
+planning agents. arXiv e-prints (2025), arXiv–2505.
+[13] Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke
+Iwasawa. 2022. Large language models are zero-shot reasoners. Advances in
+neural information processing systems 35 (2022), 22199–22213.
+[14] Michael Krumdick, Charles Lovering, Varshini Reddy, Seth Ebner, and Chris
+Tanner. 2025. No free labels: Limitations of llm-as-a-judge without human
+grounding. arXiv preprint arXiv:2503.05061 (2025).
+[15] Binxu Li, Tiankai Yan, Yuanting Pan, Jie Luo, Ruiyang Ji, Jiayuan Ding, Zhe
+Xu, Shilong Liu, Haoyu Dong, Zihao Lin, et al. 2024. Mmedagent: Learning
+to use medical tools with multi-modal agent. In Findings of the Association for
+Computational Linguistics: EMNLP 2024. 8745–8760.
+[16] Lijun Li, Bowen Dong, Ruohui Wang, Xuhao Hu, Wangmeng Zuo, Dahua Lin,
+Yu Qiao, and Jing Shao. 2024. Salad-bench: A hierarchical and comprehensive
+safety benchmark for large language models. In Findings of the Association for
+Computational Linguistics: ACL 2024. 3923–3954.
+[17] Shiyu Li, Yang Tang, Yifan Wang, Peiming Li, and Xi Chen. 2025. ReSeek: A
+Self-Correcting Framework for Search Agents with Instructive Rewards. arXiv
+preprint arXiv:2510.00568 (2025).
+[18] Zhan Ling, Yunhao Fang, Xuanlin Li, Zhiao Huang, Mingu Lee, Roland Memisevic,
+and Hao Su. 2023. Deductive verification of chain-of-thought reasoning. Advances
+in Neural Information Processing Systems 36 (2023), 36407–36433.
+[19] Zixian Ma, Weikai Huang, Jieyu Zhang, Tanmay Gupta, and Ranjay Krishna.
+2024. m & m’s: A benchmark to evaluate tool-use for m ulti-step m ulti-modal
+tasks. In European Conference on Computer Vision. Springer, 18–34.
+[20] Grégoire Mialon, Clémentine Fourrier, Thomas Wolf, Yann LeCun, and Thomas
+Scialom. 2023. Gaia: a benchmark for general ai assistants. In The Twelfth International Conference on Learning Representations.
+[21] Aske Plaat, Annie Wong, Suzan Verberne, Joost Broekens, Niki van Stein, and
+Thomas Bäck. 2024. Reasoning with large language models, a survey. CoRR
+(2024).
+9
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Kim et al.
+
+A Detailed Description of Meta-Evaluation Process
+A.1 Dataset Generation and Validation
+In this section, we provide a detailed description of the generation and validation process for Meta-GTA and Meta-m&m’s. For each dataset,
+we first augment the single ground-truth trajectory into multiple valid ground-truth trajectories for the given query. This augmentation is
+performed using the GPT-4o model, with the input prompt shown in Fig. 7. Following this, we introduce new inefficient, hallucinatory, and
+adaptive steps, using the input prompts detailed in Fig. 8, 9, and 10. After inserting each step, we annotate it with the corresponding label
+to allow for the verification of TRACE’s predictions. The original ground-truth trajectory is preserved throughout this process to ensure
+that the performance evaluation also reflects any incorrect predictions by TRACE, such as misclassifying a normal step as inefficient or a
+hallucination.
+To ensure the integrity and quality of the dataset, a rigorous validation process was established. This process began with generating
+validation outputs for each data point using three distinct models: Claude Sonnet 4.0, GPT-4o, and Gemini Pro, employing prompts in Fig. 11,
+12,13, and 14 respectively. Following generation, a random sample of 100 outputs from each model was selected for manual inspection. A
+human annotator then assessed the validity of these samples, achieving 98.79% agreement. The final meta-evaluation dataset is exclusively
+composed of data points that received a "valid" consensus from all three LLMs.
+
+Table 5: Exact version of each model used in Meta-evaluation dataset generation and validation in Section 4, baselines in Section
+5, and evaluators for TRACE in Section 4 and 5.
+
+Model Name
+
+Llama-3.1-8B-Instruct
+Llama-3.3-70B-Instruct
+
+OpenAI API
+gpt-5-mini-2025-08-07
+gpt-4.1-2025-04-14
+o3-mini-2025-01-31
+gpt-4o-2024-11-20
+Claude API
+claude-sonnet-4-20250514
+Gemini API
+gemini-2.5-pro-preview-06-05
+TogetherAI API
+meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+meta-llama/Llama-3.3-70B-Instruct-Turbo
+
+Mistral-7B-Instruct
+Mixtral-8x7B-Instruct
+
+mistralai/Mistral-7B-Instruct-v0.1
+mistralai/Mixtral-8x7B-Instruct-v0.1
+
+Qwen2.5-7B-Instruct
+Qwen2.5-72B-Instruct
+
+Qwen/Qwen2.5-7B-Instruct-Turbo
+Qwen/Qwen2.5-72B-Instruct-Turbo
+
+GPT-5-mini
+GPT-4.1
+o3-mini
+GPT-4o
+Claude-sonnet-4
+Gemini-2.5-pro
+
+A.2
+
+Used Version
+
+Statistics of the Dataset
+
+In this section, we provide a detailed statists of our newly constructed meta-evaluation datasets, Meta-GTA and Meta-m&m’s. To offer a
+clear and comprehensive context for our experimental results, we present a summary of their key statistics in Table 6. This table shows the
+distribution of the synthetically injected labels, alongside with the number of correct and efficient trajectory. For Meta-GTA dataset, from
+the existing set of 33 tools, we select four (Calculator, OCR, ImageDescription, and GoogleSearch) and add corresponding synthetic tools
+with similar names (FastCalculator, FastOCR, ImageDescriptor, and WebSearch) to the tool set. All tool descriptions for these synthetic tools
+are kept identical to the originals, differing only by name. If an agent selects a synthetic tool, the tool output notifies that it is unavailable, at
+which point we measure the agent’s adaptivity by assessing whether it successfully continues its reasoning in the subsequent step.
+For the Meta-m&m’s dataset, we use the test-human-verified-filtered split in the dataset, which was human-filtered by the original
+authors to ensure high data quality. Since the trajectories in this dataset do not contain the agent’s thoughts, we limit our augmentation
+process to only multiple valid path augmentation and the injection of inefficient steps.
+10
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Table 6: Statistics of Meta-GTA and Meta-m&m’s
+
+Meta-GTA
+
+Meta-m&m’s
+
+761
+168
+171
+251
+171
+4
+
+735
+374
+361
+-
+
+Total
+Correct
+Inefficient
+Hallucination
+Adaptivity
+Unavailable tools
+
+A.3
+
+Detailed Experimental Setting of Meta-Evaluation
+
+For the meta-evaluation and subsequent experiments within the TRACE framework, we adopted five models including three proprietary
+models, where one of them is reasoning model, and two open-source models with different sizes: GPT-4.1, Claude-Sonnet-4, Llama-3.3-70B,
+Llama-3.1-8B, and o3-mini. To enhance reproducibility of our experiments, we specify To provide detailed information about the exact
+used model versions used in experiments in Table 5. Furthermore, we illustrate the input prompts for models to conduct the evaluation of
+TRACE in Fig. 15, 16, and 17.
+
+B
+
+Detailed Setting of Experiments
+
+We utilize various LLMs including proprietary models, reasoning model, and open-source model in various sizes in this paper. To provide
+detailed information about the models used and enhance reproducibility, we specify the exact model versions used in experiments in Table 5.
+
+B.1
+
+Hyperparameter Setting
+
+To ensure experimental reproducibility, we set the temperature to 0 and fixed the max tokens at 4096 for all trials. Additionally, the maximum
+number of action turns per query was limited to 10; any query exceeding this limit was automatically treated as a failure.
+
+B.2
+
+Generation Details
+
+Building upon a prior study [26], we developed a tool-agent system utilizing a ReAct-style prompt. However, to improve the overall stability
+of our experiments and the validity of our evaluations, we introduced a modified prompt (Fig. 18) that incorporates more detailed instructions.
+This proactive measure was taken to guide the model’s behavior more predictably.
+Moreover, we were concerned that minor formatting inconsistencies in the LLM’s output could hinder the precise assessment of its
+tool-augmented capabilities. To mitigate this risk, we established a correction pipeline where the output is automatically processed by
+gpt-5-mini [1] with a dedicated formatting prompt (Fig. 19), thereby standardizing the final format.
+
+C Further Analysis
+C.1 Extension to Multi-Agentic System
+To demonstrate the flexibility of TRACE beyond the ReAct-based format, we applied the multi-agent system (MAS) Magentic-One [6] to the
+contemporary agentic system benchmark, GAIA [20]. Magentic-One consists of an orchestrator and several agents, each assigned a specific
+role.
+Multi-agent system operates through sequential steps like a single agent, allowing for a conceptual extension of our framework. Specifically,
+we can maintain a separate evidence bank for each individual agent. The orchestrator’s tendency to cause hallucination can then be assessed
+by examining the entire set of evidence banks. Furthermore, efficiency can be measured using the same methodology.
+Table 7: Performance of Multi-Agent System on GAIA dataset.
+
+Evaluator
+Claude-Sonnet-4
+GPT-4.1
+o3-mini
+Llama-3.3-70B
+
+Efficiency
+
+Hallucination
+
+Accuracy
+
+93.09
+97.07
+88.06
+93.16
+
+79.58
+81.38
+84.50
+81.40
+
+20.45
+20.45
+20.45
+20.45
+
+11
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Kim et al.
+
+Table 8: Efficiency of failed trajectories of LLM agents on GTA dataset.
+
+Models
+
+Claude
+
+GPT-4.1
+
+Llama 70B
+
+Llama 8B
+
+Mistral 7B
+
+Mixtral 8x7B
+
+Qwen 7B
+
+Qwen 72B
+
+o3-mini
+
+Claude-Sonnet-4
+GPT-4.1
+Llama-3.3-70B
+o3-mini
+Average
+Avg. for successful traj.
+
+92.31
+91.86
+87.95
+81.48
+88.40
+93.51
+
+88.80
+88.83
+85.85
+76.26
+84.94
+93.31
+
+82.89
+73.33
+81.97
+70.64
+77.21
+77.81
+
+48.75
+52.83
+43.59
+36.51
+45.42
+56.21
+
+94.40
+95.70
+95.27
+95.37
+95.19
+00.00
+
+64.02
+74.52
+65.92
+65.92
+68.49
+74.24
+
+75.47
+83.16
+77.58
+77.58
+79.04
+90.26
+
+89.21
+91.23
+90.33
+90.33
+90.99
+94.36
+
+89.63
+85.11
+88.35
+88.35
+88.82
+93.82
+
+The experimental results presented below confirm that TRACE is not constrained by output formats such as the simple Action-InputOutput sequence used in ReAct, and can be readily applied to any agentic system with only minor modifications. These findings validate the
+generalizability and impact of our framework across various agent architectures.
+
+C.2
+
+Efficiency of Failed Trajctories
+
+Measuring efficiency solely on successful trajectories may introduce survivorship bias. Therefore, we also measure efficiency for failed
+trajectories, with the results detailed in Table 8, and the final row of the table reports the efficiency of successful trajectories.
+The experimental results demonstrate that failed trajectories are more inefficient than successful trajectories. This implies that the more
+unnecessary tools an agent uses, the lower its probability of arriving at the correct answer. This finding aligns with our observation as
+described in the paper, that immediately identifying and correctly using the necessary tool increases the model’s probability of success.
+Furthermore, a simple yet effective approach to comprehensively evaluate model performance while mitigating survivorship bias would be
+to compute the weighted product of accuracy and efficiency.
+
+D
+
+Case Studies
+
+In this section, we conduct a case study with specific examples to complement our evaluation of the reasoning trajectories in tool-augmented
+tasks. We focus on GPT-4.1 and Qwen-72B, two models with a marginal difference of only 0.079 in their Overall Accuracy, yet they exhibit
+distinct trade-offs between efficiency and hallucination. As shown in Table 4, GPT-4.1 is less efficient than Qwen-72B but also hallucinates
+less, a pattern we also find in our case studies.
+As illustrated in Fig. 5, both GPT-4.1 and Qwen-72B arrive at the correct answer. However, GPT-4.1, despite having already obtained the
+key information "Regency Cafe," takes an unnecessary tool call in Step 2 for a more cautious exploration, which lowers its overall trajectory
+efficiency. In contrast, Qwen-72B selects only the necessary tools and reaches the answer via the shortest possible trajectory.
+Furthermore, in Figure 6, both models fail to produce the correct answer. The failure in both cases stems from attempting to reason
+without referencing the second image. However, their failure modes diverge: while GPT-4.1 attempts to search for the required information
+using GoogleSearch, Qwen-72B resorts to hallucination, utilizing information that was not provided (Step 2).
+As these case studies on efficiency and hallucination demonstrate, even when agents exhibit the same final performance (correct or
+incorrect), their internal trajectories can be fundamentally different. This highlights the necessity of considering these underlying processes
+for a true evaluation of agent capabilities and serves as the most intuitive validation of our core motivation.
+
+12
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task
+Query: Where was this photo taken?
+Just tell me the city
+Correct Answer: London
+
+Step 1
+
+GPT-4.1
+
+Step 1
+
+Qwen-72B
+
+To determine the city where the photo was
+taken, I need to analyze the image and extract
+any information that could help identify the
+location. The best tool for this initial step is
+ImageDescription, …
+
+I need to analyze the image to gather clues
+about the city where the photo was taken. A
+brief description of the image will help.
+ImageDescription (Image)
+
+ImageDescription (Image)
+
+The image features a restaurant with a large
+window that displays the name \"Regency
+Cafe\" in white letters. The window is adorned
+with red and white checkered tablecloths...
+
+The image features a restaurant with a large
+window that displays the name \"Regency
+Cafe\" in white letters. The window is adorned
+with red and white checkered tablecloths...
+
+Step 2
+
+Step 2
+
+The description mentions a restaurant named
+\"Regency Cafe\" and suggests it is located in a
+city. To identify the specific city, I will use the
+GoogleSearch tool to search for \"Regency
+Cafe\" along with the details …
+
+The name \"Regency Cafe\" is a distinctive
+clue. I should extract any additional text from
+the image (such as addresses or other signage)
+to help identify the city.
+OCR (“Image”)
+
+GoogleSearch(“Regency Cafe”)
+
+"(57, -2, 547, 190) R EGENcy CAFE"
+
+\"title\": \"Regency Cafe - London\",\n \"url\":
+\"https://www.regencycafe.co.uk\",\n
+\"snippet\": \"Regency Cafe is a classic British
+cafe located in the heart of London. ...
+
+Step 3
+
+Step 3
+
+The name \"Regency Cafe\" is distinctive and
+could be associated with a specific city. I
+should search for \"Regency Cafe\" to
+determine its location
+
+Final Answer: London
+
+GoogleSearch(“Regency Cafe”)
+\"title\": \"Regency Cafe - London\",\n \"url\":
+\"https://www.regencycafe.co.uk\",\n
+\"snippet\": \"Regency Cafe is a classic British
+cafe located in the heart of London. ...
+
+Step 4
+GPT-4.1
+
+Final Answer: London
+
+Correct, but Inefficient
+Qwen-72B
+13
+
+Correct, Efficient
+
+Figure 5: Case study: Both agents are correct but trajectory efficiency is different in GPT-4.1 and Qwen-72B cases.
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Kim et al.
+
+Task
+Query: How many cups
+of water do the people
+in the photo need to
+consume in a day?
+Correct Answer: 27
+Step 1
+
+GPT-4.1
+
+Qwen-72B
+
+Step 1
+
+"To determine how many cups of water the
+people in the photo need to consume in a day, I
+first need to understand who is in the photo
+and possibly their activity level, which can
+influence water intake. I will start by getting a
+brief description of the image ...
+
+I need to determine how many people are in
+the photo to calculate the total cups of water
+needed. I will first get a description of the
+image to understand its content.
+ImageDescription (Image)
+
+ImageDescription (Image)
+The image features a man and a woman
+standing close to each other, with the woman
+holding onto the man's neck. They are both
+smiling and ...
+
+The image features a man and a woman
+standing close to each other, with the woman
+holding onto the man's neck. They are both
+smiling and ...
+
+Step 2
+
+Step 2
+
+The general recommendation is about 2.7 liters
+(about 11 cups) for women and 3.7 liters
+(about 15.5 cups) for men. Since the image
+does not provide specific details, I will use
+these general guidelines...
+
+There are two people in the photo. Next, I need
+to determine the recommended daily water
+intake per person in cups to calculate the total
+amount needed for both individuals."
+GoogleSearch(“recommended daily water
+intake in cups per person”)
+
+Calculator (26.5)
+
+\"snippet\": \"The recommended daily water
+intake varies by individual, but a common
+guideline is about 8 cups (64 ounces) per day
+for most adults...
+
+26.5
+
+Step 3
+
+Step 3
+
+The recommended daily water intake is about
+13 cups for men and 9 cups for women. Since
+there is one man and one woman in the photo,
+I will add these two values to get...
+
+Final Answer: 26.5
+
+Calculator(13+9)
+22
+
+Step 4
+GPT-4.1
+
+Final Answer: 22
+
+Incorrect
+Qwen-72B
+14
+
+Incorrect and Hallucination
+
+Figure 6: Case study: Both agents (GPT-4.1 and Qwen-72B) are incorrect but GPT-4.1 trajectory shows hallucination.
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task Instruction
+You are a helpful assistant.
+The following is a dialog from an LLM agent that uses various tools to solve a specific query.
+{DIALOG}
+In the following dialog, assuming each tool usage step is numbered 1, 2, 3..., tell me all the
+possible orders that would still lead to the correct answer even if the sequence is changed.
+Use only tools that are actually called in the dialog, and all tool dependencies must be kept.
+Orders should be in number, do not include tool name or final explanation step.
+For example, follow the format such as [[1, 2, 3], [2, 1, 3]].
+Try to find all possible orders.
+Figure 7: Prompt for generating multiple ground-truth paths.
+
+15
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task Instruction
+# Role
+You are an expert in creating benchmark datasets for evaluating Large Language Models. Your
+goal is to introduce specific, plausible flaws into correct reasoning processes.
+# Task
+Your task is to take a "golden" (correct and efficient) dialog and rewrite it to be **inefficient**.
+The model should still arrive at the correct final answer, but through a suboptimal path.
+# Definition of Inefficiency
+Introduce {NUMBER} of the following types of inefficiency into the dialog:
+1. **Redundant Tool Call**: Add a step where the model calls the same tool with the same
+arguments to "double-check" information it already has.
+2. **Unnecessary Tool Call**: Add a step that is irrelevant to solving the user's final question
+(e.g., counting unrelated objects).
+3. **Suboptimal Tool Choice**: Replace a direct and precise tool call with a less effective one
+that requires more steps to get the same information (e.g., using `ImageDescription` to guess text
+instead of `OCR`).
+# Example Dialog
+{EXAMPLE_DIALOG}
+# Example Output
+{EXAMPLE_OUTPUT}
+# Golden Dialog
+{GOLDEN_DIALOG}
+# Your Task
+Rewrite the provided "Golden Dialog" to include one type of inefficiency, following all the rules
+below.
+# Rules & Constraints
+- You must modify the `thought` process to plausibly justify the inefficient action. The thought
+should sound reasonable but be clearly suboptimal.
+- **Crucially, the final answer in the dialog must still be correct.**
+- Return only the original format, without any additional explanations or text.
+- If you insert a inefficienct step, change the 'is_inefficient' key from 0 to 1 below the 'tool_calls'
+key.
+- Change the 'inefficiency' key from 0 to the number of inefficient steps you have added.
+- Tools you can use are: {TOOL_META}, but you can create your own reasonable tool.
+- Input files are given as follows:
+Figure 8: Prompt for generating inefficiency in the Meta evaluation dataset.
+16
+
+Kim et al.
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task Instruction
+# Role
+You are an expert in creating benchmark datasets for evaluating Large Language Models. Your
+goal is to introduce specific, plausible flaws into correct reasoning processes.
+# Task
+Your task is to take a "golden" (correct and efficient) dialog and rewrite it to introduce a
+**hallucination**. The model should make a factual error based on a tool's output and then
+proceed based on that error. Refer to "Input Example" and "Output Example"
+# Definition of Hallucination
+Insert the hallucination into the dialog:
+**Reasoning Hallucination**: The `thought` following a tool call must misinterpret or fabricate
+a key piece of information from the tool's output (e.g., the tool output says the beer is "Magna",
+but the `thought` claims it is "Heineken").
+## Rules & Constraints
+- You must modify the `thought` process to reflect the hallucinated fact.
+- **After the point of hallucination, all subsequent steps must logically follow the initial
+hallucinated fact.** This creates a cascading error.
+- As a result of the hallucination, the final answer will most likely be incorrect, but it can be
+correct if hallucination does not matter directly.
+- Do not change gt_answer even if you change the final answer in the dialog.
+- If you insert a hallucination, change the 'is_hallucination' key from 0 to 1 below the 'thought' key.
+- Change the 'hallucination' key from 0 to the number of hallucination steps you have added.
+- Return only the original format, without any additional explanations or text.
+## Input Example
+{INPUT_EXAMPLE}
+## Output Example
+{OUTPUT_EXAMPLE}
+## Golden Dialog
+{GOLDEN_DIALOG}
+## Your Task
+Rewrite the provided "Golden Dialog" to include one hallucination, following all the rules above.
+Figure 9: Prompt for generating hallucinations in the Meta evaluation dataset.
+
+17
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task Instruction
+## Role
+You are an expert in creating benchmark datasets for evaluating the resilience and error-correction
+capabilities of Large Language Models.
+## Task
+Your task is to take a "golden" (correct and efficient) dialog and rewrite it to include a "adaptivity
+test". This means you will intentionally inject one or more failed tool calls into the middle of the
+dialog, followed by a successful recovery where the model gets back on track and correctly solves
+the problem.
+## Error concept
+**Unavailable Tool Error**: This simulates the model choosing a plausible tool that is
+temporarily offline or unavailable.
+- The `content` of the `tool` turn for this error **must be exactly**: `"This tool is not available
+now. consider other tools."`
+## Rules for Transformation
+1. **Find Insertion Point**: Choose a logical step in the middle of the "Golden Dialog" to
+insert the error-recovery sequence.
+2. **Inject Failure**: the `assistant` should attempt to use a plausible but unavailable tool. You
+can invent a similar-sounding tool (e.g., if the correct tool is `OCR`, try `FastOCR`). The
+`thought` should justify why it's trying this alternative.
+3. **Insert Error Message**: The subsequent `tool` turn must use the exact error message
+string defined in the "Error Concepts" section.
+4. **Inject Successful Recovery**: After the failed attempt, the next `assistant` turn must show
+a successful recovery. The `tool_calls` should then use the correct tool that advances the problemsolving process.
+5. **Proceed to Correct Answer**: After the successful recovery, the rest of the dialog must
+proceed logically and correctly to the final answer, just like in the original "Golden Dialog".
+6. **Final Answer Integrity**: The final answer of the entire generated dialog must still be
+correct.
+7. **Add Adaptivity Label**: If you insert a adaptivity step, change the 'is_adaptivity' key from
+0 to 1 below the 'tool_calls' key.
+--## Example Dialog
+{EXAMPLE_DIALOG}
+## Golden Dialog (Input)
+{GOLDEN_DIALOG}
+--## Your Task (Output)
+Based on the inputs and rules above, rewrite the "Golden Dialog" to include the specified
+resilience test. The output must be a single, valid18JSON object.
+Figure 10: Prompt for generating adaptivity in the Meta evaluation dataset.
+
+Kim et al.
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task Instruction
+## Role
+You are an expert AI Agent Evaluator, skilled in recognizing that a problem can have multiple
+valid solution paths.
+## Task
+Your task is to validate whether the provided `Candidate Dialog` represents a **valid alternative
+solution path** compared to the `Original Dialog`. A valid alternative path must be logically
+coherent and arrive at the same correct answer, even if its strategy or steps are different.
+## Analysis Steps
+1. **Verify Final Answer**: First, confirm that the final answers of both dialogs are identical
+and correct. This is a critical first check.
+2. **Trace Candidate's Logic**: Trace the logic of the `Candidate Dialog` step-by-step. Is each
+action well-justified and does it contribute to solving the problem?
+3. **Compare Strategies**: Compare the overall strategy of the `Candidate Dialog` to the
+`Original`. Is it a genuinely different but still logical approach (e.g., analyzing images in a
+different order, using a different tool to get the same information)?
+4. **Conclude**: Based on the analysis, decide if the `Candidate Dialog` is a valid alternative
+solution path.
+## Input Data
+Original Dialog: {ORIGINAL_DIALOG}
+Candidate Dialog: {CANDIDATE_DIALOG}
+## Your Output
+If it is valid, return 1; otherwise, return 0. No other text or explanation will be accepted.
+## Example of your output:
+1
+Figure 11: Prompt for validating augmented multiple ground-truth paths.
+
+19
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task Instruction
+## Role
+You are a meticulous AI Agent Evaluator specializing in identifying inefficiencies by comparing a
+given process to an optimal baseline.
+## Task
+Your task is to compare the `Candidate Dialog` against the `Original Dialog` to verify if the
+`Candidate` is a valid example of **inefficiency**.
+## Analysis Steps
+1. **Verify Correctness**: Confirm that both dialogs reach the same correct final answer.
+2. **Establish Baseline**: Use the `Original Dialog` as the "critical path" or baseline for
+optimal efficiency.
+3. **Find Deviations**: Compare the tool calls in the `Candidate Dialog` to the baseline.
+Pinpoint the exact extra steps, redundant calls, or suboptimal choices present in the `Candidate`
+that are not in the `Original`.
+4. **Conclude**: If the `Candidate` contains wasteful steps but still gets the right answer, it is a
+valid inefficient sample. Verify that the number of inefficient steps matches the 'inefficiency' value
+of the Candidate dialog.
+## Input Data
+Original Dialog: {ORIGINAL_DIALOG}
+Candidate Dialog: {CANDIDATE_DIALOG}
+## Your Output
+If it is valid, return 1; otherwise, return 0. No other text or explanation will be accepted.
+## Example of your output:
+1
+Figure 12: Prompt for validating augmented inefficiency in the Meta evaluation dataset.
+
+20
+
+Kim et al.
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task Instruction
+## Role
+You are a meticulous AI Agent Evaluator specializing in detecting hallucinations by checking if
+reasoning is supported by evidence.
+## Task
+Your task is to analyze the `Candidate Dialog` to verify if it contains a **hallucination**. Use
+the `Original Dialog` as a reference for a correct reasoning process.
+## Analysis Steps
+1. **Focus on the Candidate**: Your primary analysis should be on the internal consistency of
+the `Candidate Dialog`.
+2. **Evidence vs. Reasoning**: Go through the `Candidate Dialog` turn-by-turn. For each
+`assistant` turn, compare its `thought` against the `content` of the *immediately preceding*
+`tool` turn within that same dialog.
+3. **Pinpoint Contradiction**: Identify the exact turn where the `thought` deviates from the
+available evidence.
+4. **Reference the Original**: You can refer to the `Original Golden Dialog` to see what the
+correct reasoning at a similar step should have looked like, which can help confirm the error in the
+`Candidate`.
+5. **Conclude**: If you find a clear, evidence-defying claim in the `Candidate`'s reasoning, it is
+a valid hallucination sample. Verify that the number of hallucination steps matches the
+'hallucination' value of the Candidate dialog.
+## Input Data
+Original Dialog: {ORIGINAL_DIALOG}
+Candidate Dialog: {CANDIDATE_DIALOG}
+## Your Output
+If it is valid, return 1; otherwise, return 0. No other text or explanation will be accepted.
+## Example of your output:
+1
+Figure 13: Prompt for validating augmented hallucinations in the Meta evaluation dataset.
+
+21
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+Task Instruction
+## Role
+You are a meticulous AI Agent Evaluator specializing in verifying complex, multi-step error-andrecovery scenarios.
+## Task
+Your task is to compare the `Candidate Dialog` against the `Original Golden Dialog` to verify if
+the `Candidate` is a valid example of **adaptivity**.
+## Analysis Steps
+1. **Identify Deviation Point**: Compare the `Candidate` and `Original` dialogs to find the
+point where the `Candidate` deviates to begin its error-recovery sequence.
+2. **Analyze the Candidate's Sequence**:
+- Count the number of injected errors (E). The injected error is that the tool content includes
+'consider other tools'.
+- Count the number of successful recoveries (S). The successful recovery is that tool content
+does not include 'consider other tools' after injected error.
+3. **Validate Metric**: Compare your calculated S and E with the value of the `adaptivity` key
+in the `Candidate`'s top-level data. Does your calculated `'S/E'` string match the provided one?
+4. **Conclude**: The dialog is valid only if the error-recovery sequence is logical and the
+`adaptivity` metric is accurate.
+## Input Data
+Original Dialog: {ORIGINAL_DIALOG}
+Candidate Dialog: {CANDIDATE_DIALOG}
+## Your Output
+If it is valid, return 1; otherwise, return 0. No other text or explanation will be accepted.
+## Example of your output:
+1
+Figure 14: Prompt for validating augmented adaptivity in the Meta evaluation dataset.
+
+22
+
+Kim et al.
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+System Prompt
+You are an expert evaluator of AI agent reasoning. Your task is to simulate the agent's step-by-step
+thinking process to determine if every piece of evidence was a necessary building block.
+
+User Prompt
+Your task is to analyze the agent's reasoning path from the agent's perspective, **without using
+hindsight**. Evaluate if each piece of evidence was a logical and necessary building block to get
+to the next step in solving the query.
+### Rules for Evaluation:
+A piece of evidence is **EFFICIENT** if it provides any of the following "valuable
+information":
+- **A. Contextual Information**: Helps identify what an object is or its purpose (e.g., "This
+image is a menu," "This is a receipt"). This is crucial for planning subsequent steps.
+- **B. Linking Information**: Connects two different pieces of evidence (e.g., The brand name
+'Magna' found on a bottle links the bottle to the 'Magna' item on a menu's price list).
+- **C. Calculation Data**: Provides a direct value needed for the final answer (e.g., count is '2',
+price is '6').
+An evidence is **INEFFICIENT** ONLY IF it is completely irrelevant to A, B, and C (e.g.,
+getting the weather forecast to calculate a price).
+--### Example (This entire path is EFFICIENT)
+{Example}
+--### Your Task
+Now, evaluate the following case using the same meticulous, step-by-step process. First, write
+your 'Analysis', then conclude with 'Verdict: None' or the indices of inefficient evidence (e.g.,
+'Verdict: 2') on the last line.
+**Original Query:**
+{query}
+** Input Files **
+{files}
+**Collected Evidence:**
+{evidence_with_indices}
+**Final Answer:**
+{final_answer}
+**Analysis:**
+Figure 15: TRACE Prompt for evaluating inefficiency.
+
+23
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+System Prompt
+You are a highly precise logical evaluation expert. Your task is to determine if an agent's thought
+is grounded in the provided evidence by following a strict reasoning process.
+
+User Prompt
+Evaluate if the 'Agent's Thought' is a valid, non-hallucinatory step based on the 'Evidence So Far'
+and the provided rules and examples.
+### Overall Goal (User's query):
+{query}
+### Input files:
+{files}
+### Evaluation Rules:
+1. **Reasonable inferences are NOT hallucinations**: Based on the Overall Goal, the agent
+can make logical connections (e.g., if the goal is about 'beer', seeing a 'bottle' and thinking 'beer' is
+acceptable).
+2. **Planning is NOT a hallucination**: Thoughts that describe a plan for the next action are
+valid.
+3. **A hallucination is stating a specific, verifiable fact that is NOT in the evidence OR
+contradicts it**
+--### Example 1 (Not a Hallucination)
+{Example 1}
+### Example 2 (A Hallucination)
+{Example 2}
+--### Your Task
+Now, evaluate the following thought using the same process. First, write your 'Analysis', then
+conclude with 'Verdict: Yes' or 'Verdict: No' on the last line.
+**Evidence So Far:**
+{evidence_store}
+**Agent's Thought:**
+"{thought}"
+**Analysis:**
+Figure 16: TRACE Prompt for evaluating hallucinations.
+
+24
+
+Kim et al.
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+System Prompt
+You are an expert in evaluating AI agent behavior, specifically their ability to adapt after making a
+mistake.
+
+User Prompt
+Your task is to evaluate if the 'Agent's Thought' shows adaptivity after a tool call failed.
+### Context of Failure:
+The agent just tried to use the tool and was told to consider other tools.
+### Evaluation Rules:
+- **Adaptive (Verdict: Yes):** The agent acknowledges the failure (explicitly or implicitly) and
+tries a new approach. This includes calling a different tool, changing the parameters, or
+formulating a new plan to solve the problem.
+- **Not Adaptive (Verdict: No):** The agent gives up or gets stuck without making progress.
+--### Example 1 (Adaptive)
+{Example 1}
+--### Example 2 (Not Adaptive - Gives Up)
+{Example 2}
+--### Your Task
+Now, evaluate the following thought using the same process. First, write your 'Analysis', then
+conclude with 'Verdict: Yes' or 'Verdict: No' on the last line.
+**Agent's Thought:**
+"{thought}"
+**Analysis:**
+Figure 17: TRACE Prompt for evaluating adaptivity.
+
+25
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+System Prompt
+You are an expert who can utilize external tools.
+
+User Prompt
+Tool descriptions: {tool_description}
+To use a tool, follow this exact format: Thought: <your reasoning> then Action: <the tool name,
+must be one of {tool_names} then Action Input: <valid JSON object with keys matching the tool’s
+schema>.
+If no tool is needed and you know the answer, respond with: Thought: <your reasoning> then
+Final Answer: <final answer only, no extra explanation>.
+You must output exactly one of the following per step: either a single Thought/Action/Action
+Input triplet or a single Thought/Final Answer pair — never both or more than one tool at a time.
+## Rules
+- Tools are external and must be used as specified — do not guess tool outputs or simulate them
+(e.g., do not perform calculations or extract image data manually).
+- You must not call more than one tool in a single step — use exactly one tool per output. Wait for
+the tool’s actual output before deciding what to do next.
+- Do not assume, generate, or guess what the tool returns.
+- If you need to use multiple tools to complete a task, do so over multiple steps — one tool per
+step only. Never simulate tool outputs in your response.
+- If a tool generates an image or plot, return it directly using the Final Answer format without
+further verification or explanation; if further image-based work is needed, use a tool to do it.
+- All information contained in images must be extracted via tools — never inferred directly.
+- Use only the tools explicitly provided — do not make up or assume additional tools.
+- If you are unsure or lack information, do not halt — instead, use a Thought/Action/Action Input
+to gather more information before proceeding.
+Figure 18: Prompt provided to LLM for the trajectory generation.
+
+26
+
+Kim et al.
+
+Evaluating the Reasoning Trajectories of Tool-Augmented Agents
+
+KDD Workshop on Evaluation and Trustworthiness of Agentic AI, August 09, 2026, Jeju, Republic of Korea
+
+System Prompt
+You are an expert at strictly converting inputs to a specified format.
+
+User Prompt
+Convert it into one of the following JSON objects and return ONLY the JSON.
+## Rules
+- If the text includes 'Final Answer:' (case-insensitive), extract that as final_answer and return
+{kind:'final'}.
+- If final_answer contains other sentences along with the correct answer, exclude the sentences
+and enter only the correct answer without any units.
+- Otherwise, locate the FIRST trio of 'Thought:', 'Action:', 'Action Input:' (case-insensitive). Use
+ONLY that first trio.
+- 'Action Input' should be a JSON object when possible. If it's not valid JSON, return it as a string.
+- Output schemas (exactly one):
+{"kind": "final", "thought": <string>, "final_answer": <string>}
+{"kind": "step", "thought": <string>, "action": <string>, "action_input": <object or string>}
+No additional text.
+Figure 19: Formatting prompt for correcting LLM outputs.
+
+27
+
+
