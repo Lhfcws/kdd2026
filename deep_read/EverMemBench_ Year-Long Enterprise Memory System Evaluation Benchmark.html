@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EverMemBench 精读笔记 · Keynote 重建</title>
+  <script>
+    MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    body { max-width: 860px; margin: 0 auto; padding: 2rem; font-family: 'Georgia', serif; color: #222; line-height: 1.75; background: #fafaf8; }
+    h1 { font-size: 1.6rem; border-bottom: 2px solid #333; padding-bottom: 0.4rem; margin-top: 2rem; }
+    h2 { font-size: 1.2rem; color: #444; margin-top: 1.8rem; }
+    h3 { font-size: 1rem; color: #555; }
+    .paper-card { background: #f0ede6; border-left: 4px solid #8b7355; padding: 1rem 1.2rem; border-radius: 4px; margin: 1.2rem 0; }
+    .paper-card p { margin: 0.3rem 0; }
+    .claim-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .claim-table th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    .claim-table td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.78rem; font-family: monospace; }
+    .badge-strong { background: #d4edda; color: #155724; }
+    .badge-weak   { background: #fff3cd; color: #856404; }
+    .badge-unsup  { background: #f8d7da; color: #721c24; }
+    .mermaid { margin: 1.2rem 0; }
+    blockquote { border-left: 3px solid #bbb; margin: 1rem 0; padding: 0.5rem 1rem; color: #555; font-style: italic; }
+    code { background: #f0ede6; padding: 0.1rem 0.3rem; border-radius: 2px; font-size: 0.88em; }
+    pre { background: #f0ede6; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .tag { display: inline-block; background: #e8e4db; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.8rem; margin: 0.1rem; }
+    nav { position: sticky; top: 0; background: #fafaf8ee; border-bottom: 1px solid #ddd; padding: 0.5rem 0; margin-bottom: 1.5rem; font-size: 0.85rem; z-index: 10; }
+    nav a { margin-right: 1rem; color: #5a4a3a; text-decoration: none; }
+    nav a:hover { text-decoration: underline; }
+    .footnote { font-size: 0.82rem; color: #777; border-top: 1px solid #ddd; margin-top: 2.5rem; padding-top: 0.8rem; }
+    table.crit { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.crit th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    table.crit td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .recon { background: #fbf3e0; border-left: 4px solid #c79a3a; padding: 0.7rem 1rem; border-radius: 4px; margin: 1.2rem 0; font-size: 0.9rem; color: #5a4a2a; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#card">Paper Card</a>
+  <a href="#overview">整体认知</a>
+  <a href="#method">方法</a>
+  <a href="#ledger">证据账本</a>
+  <a href="#critique">批判评价</a>
+  <a href="#use">研究用途</a>
+  <a href="#appendix">附录图</a>
+</nav>
+
+<div class="recon">
+  ⚠️ <strong>重建说明：</strong>本页面为基于本仓库 <code>kdd2026_observation.md</code>「Keynote 专场」记录的<strong>重建精读</strong>。EverMemBench 是 Jian Pei 在 KDD 2026 Workshop Keynote 中介绍的工作，原工作暂无本地 PDF 原文，文中具体数字、任务规模与评估协议以正式论文 / 演讲为准。以下结构沿用 deep_read/ 既有精读模板，内容依据观察笔记还原，非逐页通读。
+</div>
+
+<h1>EverMemBench：模拟一整年企业运行的记忆系统评估基准（精读 · Keynote 重建）</h1>
+
+<div class="paper-card" id="card">
+  <p><strong>标题：</strong>EverMemBench: A Year-Long Enterprise Memory System Evaluation Benchmark for Agentic AI（英文题名为据 keynote 内容推断；演讲未给出正式题名）</p>
+  <p><strong>作者 / 机构：</strong>Jian Pei · Duke University / Amazon Scholar</p>
+  <p><strong>Venue / 年份：</strong>KDD 2026 Workshop「Evaluation and Trustworthiness of Agentic AI」Keynote 贡献工作（推断）；2026</p>
+  <p><strong>来源：</strong>基于 kdd2026_observation.md「Keynote 专场」记录重建；原工作暂无本地 PDF 原文</p>
+  <p><strong>领域 / 任务：</strong>Agent 记忆系统评估基准 / 长程可靠性；面向长期记忆在碎片化证据、事后修正、未言明偏好下的正确性</p>
+  <p><strong>一句话论文：</strong>用"模拟一整年企业运行"的时间压力测试来评估记忆系统，主张记忆可靠性不能靠短时测试推断，必须在时间维度上做压力测试。</p>
+  <p>
+    <span class="tag">memory-eval</span><span class="tag">long-horizon</span><span class="tag">agent-eval</span>
+    <span class="tag">benchmark</span><span class="tag">keynote</span><span class="tag">reconstruction</span>
+  </p>
+  <p><strong>阅读决策：</strong><span class="badge badge-weak">精读（重建）</span> 理由：作为 keynote 提出的时间维度评估范式，与本仓库 #16/#37/#42 等记忆 / RAG 评测形成对照，价值在"把时间作为独立压力维度"，适合拆其压力测试设计与隐含假设。</p>
+</div>
+
+<h2 id="overview">整体认知</h2>
+
+<p><strong>问题。</strong>长期记忆系统是 agent 在真实企业场景落地的关键部件，但现有记忆 / RAG 评测多为短时、单轮、合成查询（本仓库 #16 PRISM、#37 IFCMemoryBench、#42 Active RAG 均偏单模型 / 单任务）。这类评测无法回答一个核心问题：记忆系统能否在<em>长时间跨度</em>下，正确处理那些"当时不完整、后来被修正、且从未被显式声明"的信息？</p>
+
+<p><strong>先前局限。</strong>短时测试把记忆当成"检索准确率"问题，忽略了真实企业记忆的三个结构性特征：证据是<em>碎片化</em>进入的，决策会被<em>事后修正</em>，而许多偏好是<em>未言明</em>的（参与者从未说出来，却期望 agent 记住）。短时测试下这些特征要么不出现，要么被平均掉。</p>
+
+<p><strong>核心思想。</strong>把"时间"当作一个<em>独立的压力维度</em>。具体做法：构造一个模拟<em>一整年</em>企业运行的记忆系统评估基准，让参与者的记忆涉及碎片化证据、事后修正的决策、未言明的偏好等复杂情况，评估 agent 在长程跨度下能否正确处理这些信息。隐含论点是：记忆系统的可靠性不能靠短时测试来推断。</p>
+
+<p><strong>主要贡献。</strong>(1) 提出"整年企业运行"的时间压力测试范式；(2) 把碎片化证据 / 事后修正 / 未言明偏好三类长程记忆难题显式建模进基准；(3) 从方法论上主张"时间维度压力测试"应成为记忆系统评估的一等公民，呼应同 keynote 的 MPCEval（长程多方协作）与 keynote 总体立场（时间敏感的现实）。</p>
+
+<p><strong>主要证据（keynote 描述层面的论断，无公开分数）。</strong>keynote 未给出 EverMemBench 的具体准确率或排行榜，强调的是<em>方法论立场</em>：记忆可靠性必须经受时间维度的压力测试。需注意：这是基准设计主张，缺可复现的量化结果（见证据账本）。</p>
+
+<h2 id="method">方法</h2>
+
+<p>原工作无本地 PDF，以下依据 keynote 描述还原其时间压力测试架构（非原文图）。</p>
+
+<h3>1. 整年企业运行的记忆压力测试</h3>
+<div class="mermaid">
+flowchart TD
+  A[模拟一整年企业运行的时间线] --> B[记忆以三种复杂形态注入]
+  B --> C1[碎片化证据<br/>fragmented evidence]
+  B --> C2[事后修正的决策<br/>post-hoc corrected decisions]
+  B --> C3[未言明的偏好<br/>unspoken preferences]
+  C1 --> D[agent 能否在长程跨度下<br/>正确整合与回忆?]
+  C2 --> D
+  C3 --> D
+  D --> E[记忆可靠性评估<br/>而非短时检索准确率]
+  E --> F[时间维度压力测试结论]
+</div>
+
+<h3>2. 与短时记忆评测的对照</h3>
+<div class="mermaid">
+flowchart LR
+  subgraph 短时评测假设
+    G1[单轮 / 短时]
+    G2[完整证据]
+    G3[稳定偏好]
+  end
+  subgraph EverMemBench 现实
+    H1[跨年时间线]
+    H2[碎片化 + 事后修正]
+    H3[未言明偏好]
+  end
+  G1 -->|突破| H1
+  G2 -->|突破| H2
+  G3 -->|突破| H3
+</div>
+
+<p><strong>关键设计选择（框架亮点）。</strong></p>
+<ul>
+  <li><strong>时间作为独立维度：</strong>不把"长程"当成任务更难，而是当成需要专门压力测试的轴。</li>
+  <li><strong>三类长程难题显式建模：</strong>碎片化证据、事后修正、未言明偏好，覆盖了短时测试天然缺失的记忆失效模式。</li>
+  <li><strong>企业运行的生态效度：</strong>以"一整年企业运行"为场景骨架，提升与现实部署的贴近度。</li>
+</ul>
+
+<blockquote>keynote 隐含论点（还原）：记忆系统的可靠性不能靠短时测试来推断，必须在"时间"这个维度上做压力测试。</blockquote>
+
+<h2 id="ledger">证据账本</h2>
+
+<table class="claim-table">
+  <thead>
+    <tr><th>主张 / 计数</th><th>证据</th><th>强度</th><th>注意事项</th><th>待验证</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>记忆可靠性不能在短时测试下可靠推断，需在时间维度压力测试</td>
+      <td>keynote 明确陈述该方法论立场，并给出 EverMemBench 作为实现</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>立场本身合理且稀缺；但"整年"是否必要、多久才够，缺乏阈值论证</td>
+      <td>不同时间跨度（周 / 月 / 年）的失效曲线</td>
+    </tr>
+    <tr>
+      <td>EverMemBench 覆盖碎片化证据 / 事后修正 / 未言明偏好三类长程难题</td>
+      <td>keynote 明确列举这三类情况作为基准内容</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>归类合理；但每类的规模、注入方式、判定 oracle 未公开</td>
+      <td>公开任务规格与 oracle 定义</td>
+    </tr>
+    <tr>
+      <td>EverMemBench 是一个已构建的、模拟整年企业运行的基准</td>
+      <td>keynote 称其为"基准（benchmark）"并介绍了它</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>规模、任务数、agent 轨迹数、是否公开均未在观察笔记中给出；无法独立核实</td>
+      <td>公开仓库 / 论文与排行榜</td>
+    </tr>
+    <tr>
+      <td>"未言明偏好"可被客观判定为 agent 应记住</td>
+      <td>由 keynote "未言明的偏好"描述推断</td>
+      <td><span class="badge badge-unsup">unsupported</span></td>
+      <td>这是读者解释；原工作是否给出可操作的 oracle（agent 应在何时"猜到"未言明偏好）待确认，否则易陷入主观评分</td>
+      <td>参见正式论文 oracle 定义</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="critique">批判评价</h2>
+
+<table class="crit">
+  <thead><tr><th>维度</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>优点</strong></td>
+      <td>
+        <ul>
+          <li><strong>填补长程记忆评测空白：</strong>本仓库记忆类论文（#16/#37/#42）均偏短时 / 单模型，EverMemBench 把"时间"拉成主轴的思路稀缺且有价值。</li>
+          <li><strong>失效模式建模精准：</strong>碎片化、事后修正、未言明偏好正是短时测试会掩盖的三类真实记忆难题。</li>
+          <li><strong>方法论可迁移：</strong>"时间压力测试"可推广到任何带状态 / 长程的 agent 系统（如本仓库 #28 ACID-Bench 的事务状态、#46 经济系统生命周期）。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺点</strong></td>
+      <td>
+        <ul>
+          <li><strong>缺量化证据：</strong>keynote 未给任何分数或排名，无法判断该基准区分模型的能力（构念效度存疑，可对照本仓库 #23）。</li>
+          <li><strong>oracle 定义风险：</strong>"未言明偏好""事后修正"的正确答案如何判定，若依赖人工 / LLM judge，会引入本仓库 #30 的 judge 噪声与 #33 的 rubric 措辞敏感。</li>
+          <li><strong>成本与可复现：</strong>"整年企业运行"模拟成本极高，可能限制可参与的模型数量与重复次数（对照本仓库 #45 最小任务预算问题）。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>隐含假设</strong></td>
+      <td>
+        <ul>
+          <li>"整年"长度足以暴露长程失效——但缺乏"多久才够"的论证，可能冗余也可能仍不足。</li>
+          <li>企业运行轨迹可被无偏地模拟，且模拟分布近似真实部署分布。</li>
+          <li>三类难题相互独立可归因——实际中碎片化与事后修正常耦合。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>复现风险</strong></td>
+      <td>
+        <ul>
+          <li>无本地原文，无法复现；依赖正式论文发布轨迹生成器与 oracle。</li>
+          <li>若 oracle 含 LLM judge，需先做 judge 选择分析（#30）。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺失对照</strong></td>
+      <td>
+        <ul>
+          <li>未与本仓库短时记忆基准（#37 IFCMemoryBench）做同模型对照，无法量化"加时间轴"带来的增益。</li>
+          <li>未讨论与 RAG 触发决策校准（#42）的关系——长程记忆与 Active RAG 触发是互补问题。</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="use">研究用途</h2>
+
+<p><strong>可复用的设计。</strong></p>
+<ul>
+  <li><strong>时间维度压力测试范式：</strong>对任何带状态 agent，把"时间跨度"作为独立评估轴，构造长程回放——可迁移到本仓库 #28/#46 的状态 / 生命周期评估。</li>
+  <li><strong>三类长程记忆失效建模：</strong>碎片化证据、事后修正、未言明偏好，可直接作为记忆系统评测的失败模式清单。</li>
+  <li><strong>与 MPCEval 组合：</strong>时间轴（EverMemBench）× 多方协作（MPCEval）可拼出"长程多方协作"评估骨架。</li>
+</ul>
+
+<p><strong>应规避的设计。</strong></p>
+<ul>
+  <li>不要用短时检索准确率代表记忆系统可靠性。</li>
+  <li>不要在 oracle 定义不清时用主观评分判定"未言明偏好"类任务。</li>
+</ul>
+
+<p><strong>后续 / 相关论文。</strong></p>
+<ul>
+  <li>同 keynote 的 MPCEval（长程多方对话评估）。</li>
+  <li>本仓库 #16 PRISM、#37 IFCMemoryBench、#42 When Should Active RAG Retrieve（记忆 / RAG 短时评测）。</li>
+  <li>记忆 / 长期上下文相关：MemoryBank、Generative Agents、RAG 生命周期评估文献。</li>
+</ul>
+
+<p><strong>可能的研究方向。</strong></p>
+<ul>
+  <li>给出"时间跨度—失效暴露"曲线，确定最小充分时间预算（呼应 #45）。</li>
+  <li>用确定性 oracle（状态快照比对）替代 LLM judge 判"事后修正"正确性。</li>
+  <li>把 EverMemBench 与 #46 的 discipline stability 结合，监控长程记忆导致的分布漂移。</li>
+</ul>
+
+<h2 id="appendix">附录图</h2>
+<p>原工作暂无本地 PDF 原文，<strong>无原图可内嵌</strong>。方法节已用两张 Mermaid 图还原其时间压力测试架构与对短时评测假设的突破；正式论文发布后建议回看原文 Figure 核对"整年"轨迹的生成方式与三类任务的配比。</p>
+
+<p class="footnote">Generated by 重建（依据 kdd2026_observation.md「Keynote 专场」Jian Pei 段）· 2026-08-15 · 非逐页通读，原工作暂无本地 PDF 原文；具体数字与协议以正式论文 / 演讲为准。</p>
+
+<script>mermaid.initialize({startOnLoad:true, theme:'neutral'});</script>
+</body>
+</html>

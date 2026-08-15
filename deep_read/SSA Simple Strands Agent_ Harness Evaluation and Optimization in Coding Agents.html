@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSA / Simple Strands Agent 精读笔记 · Keynote 重建</title>
+  <script>
+    MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    body { max-width: 860px; margin: 0 auto; padding: 2rem; font-family: 'Georgia', serif; color: #222; line-height: 1.75; background: #fafaf8; }
+    h1 { font-size: 1.6rem; border-bottom: 2px solid #333; padding-bottom: 0.4rem; margin-top: 2rem; }
+    h2 { font-size: 1.2rem; color: #444; margin-top: 1.8rem; }
+    h3 { font-size: 1rem; color: #555; }
+    .paper-card { background: #f0ede6; border-left: 4px solid #8b7355; padding: 1rem 1.2rem; border-radius: 4px; margin: 1.2rem 0; }
+    .paper-card p { margin: 0.3rem 0; }
+    .claim-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .claim-table th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    .claim-table td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.78rem; font-family: monospace; }
+    .badge-strong { background: #d4edda; color: #155724; }
+    .badge-weak   { background: #fff3cd; color: #856404; }
+    .badge-unsup  { background: #f8d7da; color: #721c24; }
+    .mermaid { margin: 1.2rem 0; }
+    blockquote { border-left: 3px solid #bbb; margin: 1rem 0; padding: 0.5rem 1rem; color: #555; font-style: italic; }
+    code { background: #f0ede6; padding: 0.1rem 0.3rem; border-radius: 2px; font-size: 0.88em; }
+    pre { background: #f0ede6; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .tag { display: inline-block; background: #e8e4db; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.8rem; margin: 0.1rem; }
+    nav { position: sticky; top: 0; background: #fafaf8ee; border-bottom: 1px solid #ddd; padding: 0.5rem 0; margin-bottom: 1.5rem; font-size: 0.85rem; z-index: 10; }
+    nav a { margin-right: 1rem; color: #5a4a3a; text-decoration: none; }
+    nav a:hover { text-decoration: underline; }
+    .footnote { font-size: 0.82rem; color: #777; border-top: 1px solid #ddd; margin-top: 2.5rem; padding-top: 0.8rem; }
+    table.crit { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.crit th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    table.crit td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .recon { background: #fbf3e0; border-left: 4px solid #c79a3a; padding: 0.7rem 1rem; border-radius: 4px; margin: 1.2rem 0; font-size: 0.9rem; color: #5a4a2a; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#card">Paper Card</a>
+  <a href="#overview">整体认知</a>
+  <a href="#method">方法</a>
+  <a href="#ledger">证据账本</a>
+  <a href="#critique">批判评价</a>
+  <a href="#use">研究用途</a>
+  <a href="#appendix">附录图</a>
+</nav>
+
+<div class="recon">
+  ⚠️ <strong>重建说明：</strong>本页面为基于本仓库 <code>kdd2026_observation.md</code>「Keynote 专场」记录的<strong>重建精读</strong>。Simple Strands Agent（SSA）是 Jun (Luke) Huan（AWS AI Labs）在 KDD 2026 Workshop Industry Talk 中介绍的开源单 agent harness，原工作 / 代码暂无本地 PDF 原文；具体设计与指标以正式演讲 / 仓库为准。以下结构沿用 deep_read/ 既有精读模板，内容依据观察笔记还原，非逐页通读。
+</div>
+
+<h1>SSA / Simple Strands Agent：编码 Agent 的 Harness 评估与优化（精读 · Keynote 重建）</h1>
+
+<div class="paper-card" id="card">
+  <p><strong>标题：</strong>Simple Strands Agent (SSA): Harness Evaluation and Optimization in Coding Agents（Industry Talk 题名；轻量级开源单 agent harness）</p>
+  <p><strong>作者 / 机构：</strong>Jun (Luke) Huan · AWS AI Labs</p>
+  <p><strong>Venue / 年份：</strong>KDD 2026 Workshop「Evaluation and Trustworthiness of Agentic AI」Industry Talk；2026</p>
+  <p><strong>来源：</strong>基于 kdd2026_observation.md「Keynote 专场」记录重建；原工作暂无本地 PDF 原文</p>
+  <p><strong>领域 / 任务：</strong>编码 Agent / Coding-Agent 的 harness（脚手架）设计与优化；聚焦"意图-执行鸿沟"</p>
+  <p><strong>一句话工作：</strong>提出轻量、完全开源的单 agent harness SSA，核心是通过缩小"模型推理意图"与"工具执行"之间的意图-执行鸿沟来提升性能，而非依赖任务特定调优；可视为工业界对"harness 本身是关键变量"的印证。</p>
+  <p>
+    <span class="tag">coding-agent</span><span class="tag">harness</span><span class="tag">intent-execution-gap</span>
+    <span class="tag">open-source</span><span class="tag">keynote</span><span class="tag">reconstruction</span>
+  </p>
+  <p><strong>阅读决策：</strong><span class="badge badge-weak">精读（重建）</span> 理由：作为 keynote 从工业界角度印证本仓库 #36「Scaffold Effect」的"harness 是关键混淆变量"论点，价值在"把 harness 当作独立优化对象"，适合拆其意图-执行鸿沟框架与对 #36 的呼应。</p>
+</div>
+
+<h2 id="overview">整体认知</h2>
+
+<p><strong>问题。</strong>编码 agent 里，模型的"推理意图"（想做什么）和它实际"通过工具执行出来的结果"之间存在一道<em>意图-执行鸿沟（intent-execution gap）</em>。同样的模型，套上不同的 harness（脚手架 / 编排方式），表现可能天差地别——这正是本仓库 #36「Scaffold Effect」量化出的 40× token 差异与失败指纹复现现象。问题在于：多数团队把 harness 当成附属品，而不是可以独立优化、需要显式评估的变量。</p>
+
+<p><strong>先前局限。</strong>编码 agent 的改进常聚焦"换更强的模型"或"做任务特定调优"，却忽略了 harness 这一中间层。当 harness 选择本身是混淆变量（#36），那么"模型 A 比模型 B 好"的结论可能只是"harness A 比 harness B 更适配"，而非模型能力差异。</p>
+
+<p><strong>核心思想。</strong>与其为每个任务做特定调优，不如<em>缩小意图-执行鸿沟</em>来系统性提升性能。具体载体是 SSA——一个轻量级、完全开源的单 agent harness，把 harness 本身当成优化对象：让模型的推理意图更可靠地落到工具执行上。</p>
+
+<p><strong>主要贡献。</strong>(1) 提出 SSA 这一轻量、开源的单 agent harness 作为可复用的基线 / 研究载体；(2) 把"意图-执行鸿沟"显式定义为编码 agent 的核心失效来源与设计目标；(3) 从工业界角度印证 #36 的论点——AWS 选择优化 harness 而非只换模型，说明 harness 已被当作编码 agent 技术栈中的独立变量。</p>
+
+<p><strong>主要证据（keynote 描述层面的论断，无独立实验数字）。</strong>keynote 未给出 SSA 的具体 benchmark 分数或与 #36 的对照实验，强调的是<em>方法论立场</em>：harness 应被作为独立优化对象。其与 #36 的呼应属方向性印证，非新增量化证据（见证据账本）。</p>
+
+<h2 id="method">方法</h2>
+
+<p>原工作无本地 PDF，以下依据 keynote 描述还原其"harness 优化 / 意图-执行鸿沟"架构（非原文图）。</p>
+
+<h3>1. 意图-执行鸿沟与 harness 作为优化对象</h3>
+<div class="mermaid">
+flowchart TD
+  A[模型推理意图<br/>想做什么] --> B[意图-执行鸿沟<br/>intent-execution gap]
+  B --> C[工具实际执行<br/>做出来什么]
+  C --> D{是否对齐?}
+  D -->|鸿沟大| E[性能下降 / 失败指纹]
+  D -->|鸿沟小| F[性能提升]
+  G[SSA: 轻量开源单 agent harness] --> B
+  G -->|缩小鸿沟| F
+  H[harness 作为独立优化变量<br/>而非附属品] --> G
+</div>
+
+<h3>2. 与 Scaffold Effect（#36）的呼应</h3>
+<div class="mermaid">
+flowchart LR
+  subgraph 学术侧 #36
+    G1[harness 选择是隐藏混淆变量<br/>40x token 差异 / 失败指纹复现]
+  end
+  subgraph 工业侧 SSA
+    H1[把 harness 当独立优化对象<br/>缩小意图-执行鸿沟]
+  end
+  G1 -->|方向印证| H1
+  H1 -->|工业实现| G1
+</div>
+
+<p><strong>关键设计选择（框架亮点）。</strong></p>
+<ul>
+  <li><strong>harness 成为一等公民：</strong>显式把 harness 当成可优化、需评估的变量，而非模型能力的附属——直接落地 #36 的方法论主张。</li>
+  <li><strong>轻量 + 开源：</strong>单 agent、轻量、开源，降低复现与研究门槛，便于社区在统一基线上做 harness 对比（呼应 #36 呼吁"评估报告标注 harness 配置"）。</li>
+  <li><strong>以鸿沟为靶点：</strong>不追求任务特定调优，而是通过缩小意图-执行鸿沟获得跨任务增益，可能比 per-task tuning 更通用。</li>
+</ul>
+
+<blockquote>keynote 核心论点（还原）：编码 agent 中模型推理与工具执行之间存在"意图-执行鸿沟"；应通过缩小该鸿沟（而非任务特定调优）来提升性能；AWS 把 harness 本身作为优化对象，说明 harness 已是编码 agent 技术栈中的独立变量。</blockquote>
+
+<h2 id="ledger">证据账本</h2>
+
+<table class="claim-table">
+  <thead>
+    <tr><th>主张 / 计数</th><th>证据</th><th>强度</th><th>注意事项</th><th>待验证</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>编码 agent 存在"意图-执行鸿沟"，且是核心失效来源</td>
+      <td>keynote 明确将其定义为 SSA 的核心问题与靶点</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>概念定义清晰；但"鸿沟大小"如何量化、是否可观测未给出</td>
+      <td>给出鸿沟的可度量指标</td>
+    </tr>
+    <tr>
+      <td>缩小意图-执行鸿沟比任务特定调优更优（或更通用）</td>
+      <td>keynote 方法论主张（"而非依赖任务特定调优"）</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>属方向性主张，无对照实验证明跨任务增益优于 per-task tuning；可能二者互补</td>
+      <td>SSA（缩鸿沟）vs per-task tuning 的同模型对照</td>
+    </tr>
+    <tr>
+      <td>SSA 是轻量、完全开源的单 agent harness</td>
+      <td>keynote 明确描述其属性</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>属性陈述；但仓库地址、代码规模、维护状态未在观察笔记给出</td>
+      <td>公开仓库与基线复现</td>
+    </tr>
+    <tr>
+      <td>SSA 从工业界印证 #36 的"harness 是关键变量"</td>
+      <td>keynote 在 #36 视角下被解读为工业印证</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>这是观察笔记的解读，非 SSA 作者原话的直接声明；属方向性呼应</td>
+      <td>SSA 与 #36 同模型同任务的量化对照</td>
+    </tr>
+    <tr>
+      <td>把 harness 当独立变量可剥离"模型 vs harness"混淆</td>
+      <td>由 #36（harness 为混淆变量）推至 SSA 的设计意图</td>
+      <td><span class="badge badge-unsup">unsupported</span></td>
+      <td>SSA 是否真的实现该剥离需实验；harness 与模型仍可能耦合（见 #36 失败指纹跨模型复现）</td>
+      <td>跨 harness × 跨模型的双因子消融</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="critique">批判评价</h2>
+
+<table class="crit">
+  <thead><tr><th>维度</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>优点</strong></td>
+      <td>
+        <ul>
+          <li><strong>把 #36 落到工业基线：</strong>开源轻量 harness 让"harness 是关键变量"从学术主张变为社区可复用的研究载体，直接服务 #36 呼吁的"评估报告标注 harness 配置"。</li>
+          <li><strong>以鸿沟为靶点有通用性潜力：</strong>若缩鸿沟真能跨任务增益，则比 per-task tuning 更经济（呼应本仓库 #36 token 成本议题）。</li>
+          <li><strong>开源降低复现门槛：</strong>便于他人在统一基线上做 harness 对比，对抗 #36 揭示的不可比问题。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺点</strong></td>
+      <td>
+        <ul>
+          <li><strong>缺量化证据：</strong>keynote 未给 SSA 的 benchmark 分数，也无法判断是否真优于现有 harness（如本仓库 #8 MacCode Lab、#15 Protocol Cards 的生态）。</li>
+          <li><strong>"优于 per-task tuning"未证：</strong>主张跨任务通用，但缺乏对照，可能只是不同权衡。</li>
+          <li><strong>与 #36 的呼应是解读：</strong>观察笔记将其读作对 #36 的印证，但 SSA 作者未必以 #36 为对照，量化关联待补。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>隐含假设</strong></td>
+      <td>
+        <ul>
+          <li>意图-执行鸿沟是编码 agent 的主要瓶颈，而非模型能力本身——对某些任务可能模型能力才是主因。</li>
+          <li>轻量单 agent harness 足以覆盖复杂编码任务——可能不及多 agent / 重编排方案的上限。</li>
+          <li>harness 与模型可解耦优化——但 #36 显示失败指纹跨模型复现，说明二者耦合。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>复现风险</strong></td>
+      <td>
+        <ul>
+          <li>无本地原文 / 公开代码（观察笔记未给仓库），暂不可复现；依赖正式演讲 / 开源仓库发布。</li>
+          <li>若开源，需以 #36 式"harness–model pair"为单位报告，否则结论不可比。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺失对照</strong></td>
+      <td>
+        <ul>
+          <li>未与本仓库 #8（MacCode Lab 可复现 harness）、#15（Protocol Cards 可复现协议）做基线对比。</li>
+          <li>未做 harness × 模型的双因子消融，无法验证"剥离混淆"的声称。</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="use">研究用途</h2>
+
+<p><strong>可复用的设计。</strong></p>
+<ul>
+  <li><strong>harness 作为独立变量：</strong>任何编码 agent 评估都应把 harness 配置当作一等维度报告（本仓库 #36 的硬要求），SSA 提供了现成开源基线。</li>
+  <li><strong>意图-执行鸿沟作为诊断靶点：</strong>把"模型想做"与"工具做出来"的对齐度作为 agent 失败的诊断入口，可迁移到本仓库 #26（确定性 gate 拦截策略违规）的"意图未被忠实执行"场景。</li>
+  <li><strong>轻量开源基线策略：</strong>用统一开源 harness 做社区对比，对抗评估不可比。</li>
+</ul>
+
+<p><strong>应规避的设计。</strong></p>
+<ul>
+  <li>不要把"模型 A 优于模型 B"的结论建立在未控制 harness 的前提下（#36 的陷阱）。</li>
+  <li>不要默认 per-task tuning 是唯一增益路径——缩鸿沟可能更通用，需对照。</li>
+</ul>
+
+<p><strong>后续 / 相关论文。</strong></p>
+<ul>
+  <li>本仓库 #36 The Scaffold Effect（harness 为隐藏混淆变量）、#8 MacCode Lab（可复现 harness）、#15 Beyond Leaderboards（Protocol Cards）。</li>
+  <li>编码 agent harness / 编排相关：Agentless、SWE-agent、OpenHands 等开源框架。</li>
+</ul>
+
+<p><strong>可能的研究方向。</strong></p>
+<ul>
+  <li>用 #36 的 harness–model pair 协议，对 SSA 做跨模型量化对照，验证"剥离混淆"声称。</li>
+  <li>把"意图-执行鸿沟"指标化为可观测度量（如意图-执行一致性分数），并接 #26 的确定性 gate。</li>
+  <li>在 SSA 基线上验证轻量 harness 是否在 token 成本（#36）与任务成功率间取得更优权衡。</li>
+</ul>
+
+<h2 id="appendix">附录图</h2>
+<p>原工作暂无本地 PDF 原文，<strong>无原图可内嵌</strong>。方法节已用两张 Mermaid 图还原其意图-执行鸿沟架构与对 #36 的呼应；正式演讲 / 开源仓库发布后建议回看原文 Figure 核对 SSA 的具体结构与 benchmark 结果。</p>
+
+<p class="footnote">Generated by 重建（依据 kdd2026_observation.md「Keynote 专场」Jun Luke Huan 段）· 2026-08-15 · 非逐页通读，原工作暂无本地 PDF 原文；具体设计与指标以正式演讲 / 仓库为准。</p>
+
+<script>mermaid.initialize({startOnLoad:true, theme:'neutral'});</script>
+</body>
+</html>

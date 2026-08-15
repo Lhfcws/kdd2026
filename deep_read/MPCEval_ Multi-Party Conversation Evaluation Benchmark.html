@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MPCEval 精读笔记 · Keynote 重建</title>
+  <script>
+    MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    body { max-width: 860px; margin: 0 auto; padding: 2rem; font-family: 'Georgia', serif; color: #222; line-height: 1.75; background: #fafaf8; }
+    h1 { font-size: 1.6rem; border-bottom: 2px solid #333; padding-bottom: 0.4rem; margin-top: 2rem; }
+    h2 { font-size: 1.2rem; color: #444; margin-top: 1.8rem; }
+    h3 { font-size: 1rem; color: #555; }
+    .paper-card { background: #f0ede6; border-left: 4px solid #8b7355; padding: 1rem 1.2rem; border-radius: 4px; margin: 1.2rem 0; }
+    .paper-card p { margin: 0.3rem 0; }
+    .claim-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .claim-table th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    .claim-table td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.78rem; font-family: monospace; }
+    .badge-strong { background: #d4edda; color: #155724; }
+    .badge-weak   { background: #fff3cd; color: #856404; }
+    .badge-unsup  { background: #f8d7da; color: #721c24; }
+    .mermaid { margin: 1.2rem 0; }
+    blockquote { border-left: 3px solid #bbb; margin: 1rem 0; padding: 0.5rem 1rem; color: #555; font-style: italic; }
+    code { background: #f0ede6; padding: 0.1rem 0.3rem; border-radius: 2px; font-size: 0.88em; }
+    pre { background: #f0ede6; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .tag { display: inline-block; background: #e8e4db; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.8rem; margin: 0.1rem; }
+    nav { position: sticky; top: 0; background: #fafaf8ee; border-bottom: 1px solid #ddd; padding: 0.5rem 0; margin-bottom: 1.5rem; font-size: 0.85rem; z-index: 10; }
+    nav a { margin-right: 1rem; color: #5a4a3a; text-decoration: none; }
+    nav a:hover { text-decoration: underline; }
+    .footnote { font-size: 0.82rem; color: #777; border-top: 1px solid #ddd; margin-top: 2.5rem; padding-top: 0.8rem; }
+    table.crit { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.crit th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    table.crit td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .recon { background: #fbf3e0; border-left: 4px solid #c79a3a; padding: 0.7rem 1rem; border-radius: 4px; margin: 1.2rem 0; font-size: 0.9rem; color: #5a4a2a; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#card">Paper Card</a>
+  <a href="#overview">整体认知</a>
+  <a href="#method">方法</a>
+  <a href="#ledger">证据账本</a>
+  <a href="#critique">批判评价</a>
+  <a href="#use">研究用途</a>
+  <a href="#appendix">附录图</a>
+</nav>
+
+<div class="recon">
+  ⚠️ <strong>重建说明：</strong>本页面为基于本仓库 <code>kdd2026_observation.md</code>「Keynote 专场」记录的<strong>重建精读</strong>。MPCEval 是 Jian Pei 在 KDD 2026 Workshop Keynote 中介绍的工作，原工作暂无本地 PDF 原文，文中具体数字、基准规模与评测协议以正式论文 / 演讲为准。以下结构沿用 deep_read/ 既有精读模板，内容依据观察笔记还原，非逐页通读。
+</div>
+
+<h1>MPCEval：面向多方、长程 Agentic AI 的对话评估基准（精读 · Keynote 重建）</h1>
+
+<div class="paper-card" id="card">
+  <p><strong>标题：</strong>MPCEval: A Multi-Party Conversation Evaluation Benchmark for Long-Horizon Agentic AI（英文题名为据 keynote 内容推断；演讲未给出正式题名）</p>
+  <p><strong>作者 / 机构：</strong>Jian Pei · Duke University / Amazon Scholar</p>
+  <p><strong>Venue / 年份：</strong>KDD 2026 Workshop「Evaluation and Trustworthiness of Agentic AI」Keynote 贡献工作（推断）；2026</p>
+  <p><strong>来源：</strong>基于 kdd2026_observation.md「Keynote 专场」记录重建；原工作暂无本地 PDF 原文</p>
+  <p><strong>领域 / 任务：</strong>Agent 评测基准 / 多方对话评估；面向多 agent、多轮、跨时间的群组协作场景</p>
+  <p><strong>一句话论文：</strong>把"多方对话评估"拆成「谁该说话 / 说什么 / 内容是否合适」三个可分别度量的子问题，比只看回复质量更贴近真实群组协作。</p>
+  <p>
+    <span class="tag">multi-party-eval</span><span class="tag">dialogue-benchmark</span><span class="tag">long-horizon</span>
+    <span class="tag">agent-eval</span><span class="tag">keynote</span><span class="tag">reconstruction</span>
+  </p>
+  <p><strong>阅读决策：</strong><span class="badge badge-weak">精读（重建）</span> 理由：作为 keynote 提出的评估分解框架，其价值在于"把群组协作评估从单轮回复质量下沉到角色 / 内容 / 适配三维"，适合拆其分解逻辑与适用边界，并对照本仓库 #21/#24 等系统级失败视角。</p>
+</div>
+
+<h2 id="overview">整体认知</h2>
+
+<p><strong>问题。</strong>主流 agent 基准大多隐含一个过度简化的假设：单轮（single-turn）、单 agent（single-agent）、单任务（single-task）。但真实世界的 agent 协作是<em>多方（multi-party）、多轮（multi-turn）、跨时间（cross-time）</em>的。现有对话评估又几乎只看"这条回复质量好不好"，无法刻画群组协作里更前置、更结构性的问题——比如轮到谁说话、说的内容是否适配说话者的身份与上下文。</p>
+
+<p><strong>先前局限。</strong>单轮对话评估把"好回复"当作整体标量指标，掩盖了两类失败：一是<em>角色轮换的合理性</em>（该说话的人没说话、不该抢话的人抢了话），二是<em>内容对说话者身份 / 上下文的适配性</em>（话本身没错，但由错误的人、在错误的语境下说出）。在群组协作里，这两类问题恰恰是协作是否有效的先行条件，却不在传统对话评估的度量口径内。</p>
+
+<p><strong>核心思想。</strong>与其用一个笼统的"回复质量"分数，不如把多方对话评估<em>分解为三个正交的子问题</em>，分别度量再综合：</p>
+<ul>
+  <li><strong>谁该说话（role rotation / turn-taking 合理性）：</strong>在当前语境下，下一个发言者是否应该是它？</li>
+  <li><strong>说什么（content quality）：</strong>该发言的内容质量本身如何？</li>
+  <li><strong>内容是否合适（appropriateness to speaker &amp; context）：</strong>这句话是否适配说话者的身份、立场与上下文？</li>
+</ul>
+
+<p><strong>主要贡献。</strong>(1) 提出"三方子问题分解"的评估框架，把群组对话质量从单维下沉为三维；(2) 据此构建一个面向多方、长程对话的基准 MPCEval；(3) 把"社会扎根（socially-grounded）、时间敏感（time-sensitive）"的协作现实正式纳入评估口径，呼应 keynote 总体立场——agent 评估必须接受"混乱的、分布式的、时间敏感的、社会性扎根的现实"。</p>
+
+<p><strong>主要证据（keynote 描述层面的论断，无公开分数）。</strong>keynote 未给出 MPCEval 的具体打分或排行榜，强调的是<em>粒度差异</em>：相比传统只看回复质量的对话评估，这种三维分解"更细致得多，也更贴近群组协作的实际场景"。需注意：这是框架层面的主张，尚缺可复现的量化实验结果支撑（见证据账本）。</p>
+
+<h2 id="method">方法</h2>
+
+<p>原工作无本地 PDF，以下依据 keynote 描述还原其评估分解架构（非原文图）。</p>
+
+<h3>1. 多方对话评估的三维分解</h3>
+<div class="mermaid">
+flowchart TD
+  A[一段多方 / 多轮 / 长程对话] --> B[分解评估: 三个正交子问题]
+  B --> C1[谁该说话?<br/>角色轮换合理性<br/>turn-taking]
+  B --> C2[说什么?<br/>内容质量<br/>content quality]
+  B --> C3[是否合适?<br/>适配说话者身份<br/>与上下文 appropriateness]
+  C1 --> D[单维回复质量<br/>传统对话评估]
+  C2 --> D
+  C3 --> D
+  D --> E[MPCEval: 三维分别度量<br/>再综合]
+  E --> F[群组协作有效性<br/>而非单条回复好坏]
+</div>
+
+<h3>2. 与主流基准假设的对照</h3>
+<div class="mermaid">
+flowchart LR
+  subgraph 主流隐含假设
+    G1[单轮 single-turn]
+    G2[单 agent single-agent]
+    G3[单任务 single-task]
+  end
+  subgraph MPCEval 面向的现实
+    H1[多方 multi-party]
+    H2[多轮 multi-turn]
+    H3[跨时间 cross-time]
+  end
+  G1 -->|突破| H1
+  G2 -->|突破| H2
+  G3 -->|突破| H3
+</div>
+
+<p><strong>关键设计选择（框架亮点）。</strong></p>
+<ul>
+  <li><strong>正交分解而非加权混淆。</strong>把"角色 / 内容 / 适配"拆成可分别打分的维度，避免把它们混成一个无法归因的标量。</li>
+  <li><strong>适配性维度引入社会上下文。</strong>"内容是否合适"把说话者身份、立场、语境作为显式变量，而非假设"好内容"与"谁来说"无关。</li>
+  <li><strong>面向长程。</strong>明确把"跨时间"作为评估维度，呼应同 keynote 的 EverMemBench（时间维度的压力测试）。</li>
+</ul>
+
+<blockquote>keynote 核心论点（还原）：多数 benchmark 假设单轮、单 agent、单任务，但真实世界的 agent 协作是多人、多轮、跨时间的；评估需要接受"混乱的、分布式的、时间敏感的、社会性扎根的现实"。</blockquote>
+
+<h2 id="ledger">证据账本</h2>
+
+<table class="claim-table">
+  <thead>
+    <tr><th>主张 / 计数</th><th>证据</th><th>强度</th><th>注意事项</th><th>待验证</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>多方对话评估应分解为"谁该说话 / 说什么 / 是否合适"三维</td>
+      <td>keynote 明确给出该三维分解作为 MPCEval 的核心设计</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>属框架主张，分解本身是合理的设计选择；但三维度量如何定义、谁来标注未公开</td>
+      <td>公开基准协议与各维度 rubric</td>
+    </tr>
+    <tr>
+      <td>该分解比传统单维回复质量评估"更细致、更贴近群组协作实际"</td>
+      <td>keynote 定性陈述；强调粒度差异</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>纯定性，无对照实验证明三维分解的预测效度优于单维；可能只是口径更细而非更准</td>
+      <td>与单维基线做下游任务相关性对照</td>
+    </tr>
+    <tr>
+      <td>MPCEval 是一个已构建的多方长程对话基准</td>
+      <td>keynote 称其为"基准（benchmark）"并介绍了它</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>规模、任务数、标注方式、是否公开均未在观察笔记中给出；无法独立核实</td>
+      <td>公开仓库 / 论文与排行榜</td>
+    </tr>
+    <tr>
+      <td>"适配性"维度等价于检测身份 / 语境错配的发言</td>
+      <td>由 keynote 描述"是否符合说话者的身份和上下文"推断</td>
+      <td><span class="badge badge-unsup">unsupported</span></td>
+      <td>这是读者从描述推出的解释，原工作是否明确如此定义待确认</td>
+      <td>参见正式论文定义</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="critique">批判评价</h2>
+
+<table class="crit">
+  <thead><tr><th>维度</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>优点</strong></td>
+      <td>
+        <ul>
+          <li><strong>评估粒度下沉到位：</strong>把群组协作的前置条件（角色、适配）纳入度量，而非只看结果回复，方向上与本仓库 #7/#28/#46 等"评过程而非仅结果"的主线一致。</li>
+          <li><strong>正交分解利于归因：</strong>三维分开度量后，协作失败可被定位到"轮换错 / 内容差 / 不适配"，便于诊断。</li>
+          <li><strong>社会扎根视角稀缺：</strong>明确把"说话者身份 / 上下文"作为变量，是多 agent 安全（#11/#21）之外少见的"社会性"评估视角。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺点</strong></td>
+      <td>
+        <ul>
+          <li><strong>缺量化证据：</strong>keynote 未给出任何分数、规模或对照实验，无法判断分解是否真正提升评估效度。</li>
+          <li><strong>维度和 rubric 未公开：</strong>"是否合适"的判定标准极易依赖主观或 LLM judge，若引入 judge 则有本仓库 #30 揭示的 accuracy-masking 风险。</li>
+          <li><strong>与下游任务的相关性未证：</strong>三维分数是否预测真实协作成功率，未知。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>隐含假设</strong></td>
+      <td>
+        <ul>
+          <li>"谁该说话"可由明确规则 / 角色定义判定——但真实群组常含模糊的、涌现的发言权动态。</li>
+          <li>三维可独立打分且加总有意义——可能忽略维度间耦合（适配性依赖内容质量）。</li>
+          <li>长程对话可被压缩为可评估的片段，而不丢失时间维度的关键信号。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>复现风险</strong></td>
+      <td>
+        <ul>
+          <li>无本地原文，无法复现；依赖正式论文发布基准与标注协议。</li>
+          <li>若采用 LLM judge 评"适配性"，需先做本仓库 #30 式的 judge 选择分析。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺失对照</strong></td>
+      <td>
+        <ul>
+          <li>无与传统单维对话评估的对照实验。</li>
+          <li>无与本仓库多 agent 评估视角（#21 均衡级危害、#24 多样性坍缩）的交叉验证——MPCEval 度量"协作质量"，而 #21/#24 度量"系统级失败"，二者可能互补但未被统一。</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="use">研究用途</h2>
+
+<p><strong>可复用的设计。</strong></p>
+<ul>
+  <li><strong>评估正交分解法：</strong>对任何"整体质量"类指标，先问"它其实混了哪几个正交维度"，再分别度量——可迁移到多 agent 编排评估、协作评分。</li>
+  <li><strong>社会上下文作为显式变量：</strong>把"说话者身份 / 语境适配"纳入评估，适用于 red-teaming 多 agent 系统（#20/#11）时的角色错配检测。</li>
+  <li><strong>长程视角：</strong>与 EverMemBench 的时间压力测试互为表里，可组合成"长程多方协作"评估框架。</li>
+</ul>
+
+<p><strong>应规避的设计。</strong></p>
+<ul>
+  <li>不要用一个笼统"回复质量"分数掩盖角色 / 适配层面的失败。</li>
+  <li>不要在未做 judge 选择分析的前提下，用 LLM 直接判"适配性"。</li>
+</ul>
+
+<p><strong>后续 / 相关论文。</strong></p>
+<ul>
+  <li>同 keynote 的 EverMemBench（时间维度记忆系统评估）。</li>
+  <li>本仓库 #21 Equilibrium-Level Harm（个体评估漏检系统级危害）、#24 When Consensus Is Not Correctness（多样性坍缩）。</li>
+  <li>多 agent 对话 / 协作评估相关：CDF 类辩论评估、group decision-making 文献。</li>
+</ul>
+
+<p><strong>可能的研究方向。</strong></p>
+<ul>
+  <li>把 MPCEval 三维与 #21/#24 的系统级失败指标统一到一个"协作可靠性"框架。</li>
+  <li>用确定性 oracle（而非 LLM judge）定义"角色轮换合理性"，规避 judge 噪声。</li>
+  <li>在长程设定下验证三维分数对真实协作产出的预测效度。</li>
+</ul>
+
+<h2 id="appendix">附录图</h2>
+<p>原工作暂无本地 PDF 原文，<strong>无原图可内嵌</strong>。方法节已用两张 Mermaid 图还原其评估分解架构与对主流假设的突破；正式论文发布后建议回看原文 Figure 核对基准任务形态与各维度 rubric 定义。</p>
+
+<p class="footnote">Generated by 重建（依据 kdd2026_observation.md「Keynote 专场」Jian Pei 段）· 2026-08-15 · 非逐页通读，原工作暂无本地 PDF 原文；具体数字与协议以正式论文 / 演讲为准。</p>
+
+<script>mermaid.initialize({startOnLoad:true, theme:'neutral'});</script>
+</body>
+</html>

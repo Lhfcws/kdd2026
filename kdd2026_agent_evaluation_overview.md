@@ -1,6 +1,6 @@
 # Agent 测评综述：当前大家在讨论什么
 
-> 素材来源：本工作区 47 篇 KDD 2026 论文速读笔记中，标签含「测评」的 41 篇（index.md 中序号 #1–#15、#18–#25、#27–#40、#42、#45–#47）。以下结论均提炼自各篇笔记正文（背景与 Idea / 核心方法 / 价值与不足），不引入外部信息。
+> 素材来源：本工作区 47 篇 KDD 2026 论文速读笔记中，标签含「测评」的 41 篇（README.md 中序号 #1–#15、#18–#25、#27–#40、#42、#45–#47）为主体；另补充少量虽未标「测评」、但直接影响 agent 评估口径的相邻论文（#16、#17、#26、#41、#43、#44）。以下结论均提炼自各篇笔记正文（背景与 Idea / 核心方法 / 价值与不足），不引入外部信息。
 > 说明：这批论文高度集中在"如何评测 agent"——"测评"是绝对主线（41/47）。因此这份综述本质上是在回答：**当社区说"我们要更好地评测 agent"时，具体在解决哪些子问题。**
 
 ---
@@ -14,7 +14,7 @@ Agent 测评正在从"跑个 benchmark 看准确率"转向"评过程、要可复
 ## 二、五条跨主题趋势
 
 1. **从只看最终结果 → 评过程 / 轨迹 / 生命周期**
-   评测对象从标量答案扩展到推理轨迹效率、事务状态完整性、行为纪律与全生命周期 trace-backed 归因（#7 TRACE、#28 ACID-Bench、#40 企业分析 agent、#46 经济系统、#13 ML 实验生命周期）。
+   评测对象从标量答案扩展到推理轨迹效率、事务状态完整性、义务履行、行为纪律与全生命周期 trace-backed 归因（#7 TRACE、#17 DutyFormer、#28 ACID-Bench、#40 企业分析 agent、#46 经济系统、#13 ML 实验生命周期）。
 
 2. **从 LLM 主观打分 → 确定性 / 可执行 oracle + 统计严谨**
    用执行引擎、状态机、SQL、单位矩阵保真度等"零方差 oracle"替代 LLM 主观判分，并用噪声地板、最小任务预算、协议规范保证结论可复现（#6 量子电路、#22 PCBWorld、#28、#32 知识图谱、#15 Protocol Cards、#45、#29、#8）。
@@ -26,7 +26,7 @@ Agent 测评正在从"跑个 benchmark 看准确率"转向"评过程、要可复
    可信赖性被定义为"质量 × 可靠性 × 成本"的联合属性；预算感知的效用、校准、延迟成为评测一等维度（#5 稳定币、#6、#42 Active RAG、#36 token/solved、#35 路由成本）。
 
 5. **安全 / 可信与多智能体特殊性成为评测一等公民**
-   动作准入、护栏忠实、能力–安全联合审计、red-teaming，以及均衡级危害 / 共识过度自信 / 协调噪声等系统级失败，被系统纳入评测框架（#1、#3、#4、#9、#11、#12、#14、#20、#21、#24、#27、#31、#35）。
+   动作准入、护栏忠实、确定性 gate、能力–安全联合审计、red-teaming，以及均衡级危害 / 共识过度自信 / 协调噪声等系统级失败，被系统纳入评测框架或评测前置条件（#1、#3、#4、#9、#11、#12、#14、#20、#21、#24、#26、#27、#31、#35、#44）。
 
 ---
 
@@ -35,80 +35,87 @@ Agent 测评正在从"跑个 benchmark 看准确率"转向"评过程、要可复
 ### 主题 1：过程 / 轨迹 / 生命周期级评估（超越最终答案）
 **痛点**：最终答案相同，但推理轨迹、状态完整性、行为纪律可能已失败；只看结果无法定位根因，也发现不了"成功但有害/违规"的运行。
 
-- **#7 Beyond the Final Answer（TRACE）**：用 reference-free 的 evidence bank 评估推理轨迹的"效率 / 幻觉 / 适应性"三维度，无需 ground-truth 轨迹即可监控线上 tool-augmented agent 的冗余与幻觉步骤。
-- **#13 Governed ML Experimentation**：用 append-only ledger 记录实验全生命周期，以 provenance completeness（来源完整性）与 failure taxonomy 把可审计性前置到过程本身。
-- **#28 ACID-Bench**：对状态变更工具 agent 做确定性故障注入（部分提交 / 幽灵成功 / 过期读 / 崩溃恢复），用基于状态的评估器分离"任务成功"与"事务完整性 / 安全交接"，刻意不用 LLM judge。
-- **#40 Enterprise Analytics Agents**：端到端 trace-backed 方法论，三信号族（语义理解 / 执行质量 / 可靠性）把失败归因到具体阶段而非仅看最终答案。
-- **#46 Outcome Is Not Enough**：经济 agent 的 trace-based 生命周期评估，提出 discipline stability（纪律稳定性）——标量 RevPAR 相同但行为纪律可能失败，用 D1 距离 / JS 散度监控价格 / bid 分布偏离。
+- **#7 Beyond the Final Answer（TRACE）**：这篇论文针对 tool-augmented agent 的推理轨迹评估，指出最终答案正确并不代表过程可靠。它用 reference-free 的 evidence bank 评估效率、幻觉、适应性三维度，无需人工标注 ground-truth 轨迹。价值在于把线上可观测的 Thought / Action / Observation 序列变成可诊断对象，能发现冗余调用、证据外断言和工具失败后的不适应。
+- **#13 Governed ML Experimentation**：这篇关注 LLM 驱动的 ML 实验 agent，问题不是"模型有没有跑出更高指标"，而是实验过程是否可治理、可追溯、可复盘。方法上用 append-only ledger 记录实验全生命周期，并用 provenance completeness 与 failure taxonomy 检查数据、代码、配置、结果之间的证据链。它把实验 agent 的评估从最终分数前移到过程完整性，对企业 ML 平台的审计与合规更直接。
+- **#17 DutyFormer**：这篇把"沉默义务遗漏"定义为 agent 在流程中跳过必须执行的审批、核验、引用、记录等步骤，却没有任何显式报错。它用 Time Petri Nets 生成确定性义务状态，再用带符号注意力偏置的 Transformer 做在线前缀预测，判断当前轨迹是否会走向义务违约。它的意义是补上 process trace 中很难靠最终答案发现的一类合规风险，尤其适合贷款审批、临床分诊、客服工单等高风险流程。
+- **#28 ACID-Bench**：这篇把数据库事务可靠性的思想引入会修改持久状态的工具 agent，例如取消订单、改地址、订票。它通过确定性故障注入覆盖部分提交、幽灵成功、过期读、崩溃恢复等场景，再用基于状态的评估器分离"用户目标完成"与"事务状态完整"。它刻意不用 LLM judge，强调状态变更 agent 的核心风险是"对话看起来成功，但底层状态已经损坏"。
+- **#40 Enterprise Analytics Agents**：这篇面向企业分析 agent，认为 BI/分析场景的失败常发生在语义理解、查询执行、结果解释等不同阶段，最终答案分数不足以定位问题。它提出 trace-backed 的端到端方法论，把语义理解、执行质量、可靠性三类信号绑定到具体运行 trace。它的价值在于让企业能从"这次分析错了"追溯到"到底是理解错、查错、算错还是解释错"。
+- **#46 Outcome Is Not Enough**：这篇研究经济 agent 的生命周期评估，核心观点是同样的 RevPAR、收益或标量 outcome 可能掩盖完全不同的行为纪律。它用 trace-based 监控价格与 bid 分布，并用 D1 距离、JS 散度等指标刻画 discipline stability。论文提醒经济系统 agent 的评估不能只看收益，还要检查策略是否偏离了可接受的运营纪律。
 
 ### 主题 2：构念有效性危机与审计
 **痛点**：benchmark 是否真在测量它声称的"构念"很少被检验，排名背后的可靠性存疑，单平台 / 单模型结论易过度外推。
 
-- **#23 Construct Validity Failures**：用心理测量学跨 benchmark Spearman 相关与排名反转审计 5 个主流 benchmark，平均 ρ=0.67、22% 模型对存在排名反转，提出 D1–D5 desiderata，结论"无一个 benchmark 满足全部五条"。
-- **#25 Emergent, Steered, or Neither?**：对 MoltBook agent society 做有效性审计，用度保持零模型 + 经外部真值校验的自主 / 人类账号判别，证伪"幂律级联 / 社会强化 / 协作增益"等被广为引用的论断。
-- **#38 Auditing Construct Validity（Sports TRACE）**：把测量科学的构念效度四威胁（T1–T4）操作化为可度量审计工具（APCR / IAJA / SRI / MERS），实例化 PressureBench 审计足球战术分析论断，得出"单次 producer 调用不安全""小模型 FP 更低"等反直觉结论。
+- **#23 Construct Validity Failures**：这篇直接质疑 agent benchmark 是否真的测到了它声称的能力。作者用心理测量学框架审计 5 个主流 benchmark 的 Spearman 相关与排名反转，发现平均 ρ=0.67，且 22% 模型对存在排名反转。它提出 D1-D5 desiderata，并指出没有一个 benchmark 同时满足全部要求，说明排行榜分数的解释边界必须被显式报告。
+- **#25 Emergent, Steered, or Neither?**：这篇回头审计 MoltBook agent society 中关于"涌现社会行为"的结论。它用度保持零模型、外部真值校验的自主/人类账号判别等方式，重新检验幂律级联、社会强化、协作增益等主张。结论偏拆解性：很多看似 emergent 的现象可能来自平台结构、初始条件或测量设定，而不是 agent 社会本身的自发能力。
+- **#38 Auditing Construct Validity（Sports TRACE）**：这篇把构念效度审计落到体育战术分析这类"分析性断言"任务中。它将四类测量威胁操作化为 APCR、IAJA、SRI、MERS 等指标，并构建 PressureBench 审计足球压力分析。价值在于说明没有标准答案的决策支持场景也能做结构化审计，而且会得出反直觉结论，例如单次 producer 调用不安全、小模型某些误报反而更低。
 
 ### 主题 3：评估的统计严谨性、可复现性与协议规范
 **痛点**：评测协议、harness / scaffold 等隐藏变量与测量噪声使结论不可比、不可复现，单 seed 显著结果常在第二 seed 瓦解。
 
-- **#8 MacCode Lab**：单机构可复现 harness，揭示 public-test 与 hidden-test 重打分可能系统性分歧（7B 模型衰减远重于 35B），且 repair 是否有用取决于模型而非任务。
-- **#15 Beyond Leaderboards（Protocol Cards）**：指出评测协议本身是隐藏变量，以 SNRfile + clean-apply rate 让 coding-agent 评测可复现可审计（full-raw 比 diff-only 干净应用率 8% → 54.7%）。
-- **#29 How Much Coordination Gain Is Real?**：提出"协调噪声地板"配对协议作为协调架构声明的发布门禁，发现 7/10 近期多 agent 架构报道的提升低于本地噪声地板，单 seed 显著结果在第二 seed 即瓦解。
-- **#36 The Scaffold Effect**：harness 选择是隐藏混淆变量，token / solved 差异可达 40×，提出以 **harness–model pair** 为评估单位并报告失败指纹（REASON / VERIFY / TIME …）。
-- **#45 How Many Tasks Are Enough?**：replay 分析提出"最小充分任务预算"，证明部分评估必须声明阈值 / 覆盖规则 / 未解决比较数，否则会隐藏错误决策（SWE-bench Lite 在 95% 预算前均未达标）。
+- **#8 MacCode Lab**：这篇提供单机构可复现的 coding-agent harness，用来研究 execution-guided code agents 以及 repair 何时真正有用。它揭示 public-test 与 hidden-test 重打分可能系统性分歧，且小模型在隐藏测试上的衰减更重。论文的重点不是再刷一个 coding 榜，而是说明复现实验环境、重评分协议和模型规模都会改变对 repair 有效性的判断。
+- **#15 Beyond Leaderboards（Protocol Cards）**：这篇认为 coding-agent 分数离不开评测协议，agent 看到了什么、怎样产出补丁、怎样验证、怎样核算成本，都会改变最终结果。它提出 Protocol Cards 记录信息协议、过程协议、度量协议，并用 SNRfile 与 clean-apply rate 量化协议差异。一个典型发现是 full-raw 协议的 clean-apply rate 明显高于 diff-only，说明"分数"必须和生成它的协议一起发布。
+- **#29 How Much Coordination Gain Is Real?**：这篇专门审计多 agent 架构宣称的协调增益是否超过测量噪声。它提出配对噪声地板协议，把同模型、同任务、同设置下的本地波动作为发布门槛，发现 7/10 近期报道的提升低于噪声地板。它对多 agent 论文的影响很直接：不能只报单 seed 提升，必须证明所谓协调收益不是采样与评测协议的噪声。
+- **#36 The Scaffold Effect**：这篇把 harness/scaffold 作为编码 agent 评估中的隐藏变量单独拿出来做受控实验。固定模型和任务、只换 harness 后，token/solved 差异可达 40 倍，而通过率变化远小于成本变化。论文主张评估单位应是 harness-model pair，并报告失败指纹、token、时延等人本位部署指标，而不是只按模型名排行。
+- **#45 How Many Tasks Are Enough?**：这篇用 replay 分析回答 agent benchmark 里"到底多少任务才够支撑一个比较结论"。它提出最小充分任务预算，要求评估报告阈值、覆盖规则和未解决比较数，避免用过少任务做出过度确定的排名。对 SWE-bench Lite 的分析显示在 95% 预算前仍未达标，说明很多排行榜比较的统计基础比读者想象得薄。
 
 ### 主题 4：rubric / LLM-judge 方法论（verifier 设计、judge 选择、rubric 优化）
 **痛点**：LLM judge 选择本身就在改写评估结论；rubric 措辞决定人-AI 共识；高成本 judge 并非必要。
 
-- **#10 Comparative Analysis of Agent Eval Frameworks**：对比 trace-based / text / 确定性启发式三范式，发现信息量（trace > text > string）决定质量，功能与安全评估零重叠（推荐双框架策略）。
-- **#18 Verifying Agents in Rubric-Graded Environments**：从 rubric 反推九大 verifier 能力与 P1–P3 原则，Gandalf 以 Pareto 占优、最便宜配置（F1 0.633 / $42）超过最贵 baseline（F1 0.538 / $414）。
-- **#30 Selecting LLM Judges**：量化 judge 选择的 accuracy masking——side-effect 类错误 judge 间差异高达 45–50pp，task-success 仅 1.6–4.4pp，提出高召回 judge + 复核负担权衡。
-- **#33 Clustering-based Prompt Optimization**：稀缺标签预算下用 cluster + batch-validate 一次性优化 judge rubric，约 $25 即在留出集稳健提升人-AI 共识（P(Δ>0)=100%）。
-- **#34 Trustworthy Rule Learning**：用错误驱动规则归纳 + 规则演绎做可审计决策，规则库作为"一致性锚点"消除 LLM 随机性（92% → 84%），CoT 兼作评估工具。
+- **#10 Comparative Analysis of Agent Eval Frameworks**：这篇比较 trace-based、text-based、确定性启发式三类企业分析 agent 评估框架。它发现评估质量高度依赖信息量，trace > text > string，而功能质量和安全问题的检出几乎不重叠。结论是企业不应押注单一 evaluator，而应按目标组合框架：一个偏功能正确性，一个偏安全和失败发现。
+- **#18 Verifying Agents in Rubric-Graded Environments**：这篇把 verifier 本身作为研究对象，研究自然语言 rubric 如何被可靠验证。它从 rubric 反推九大 verifier 能力，并总结 P1 反应式验证、P2 环境对齐、P3 领域引导三条原则。Gandalf 在成本和 F1 上 Pareto 占优，说明强 verifier 不一定等于昂贵 judge，关键是它能进入与 rollout 相同的文件、工具和领域环境。
+- **#30 Selecting LLM Judges**：这篇指出选择 LLM judge 时只看 task-success accuracy 会掩盖严重问题。作者在同时有任务成功、副作用、死循环等专家标注的数据上量化 accuracy masking，发现 side-effect 类错误在 judge 间可差 45-50pp，而 task-success 差异只有 1.6-4.4pp。实践含义是 judge 选择要按用途优化：监控副作用要高召回，人工复核要计算 review burden，而不是盲选总体准确率最高者。
+- **#33 Clustering-based Prompt Optimization**：这篇解决 LLM-as-judge rubric 校准时标签少、调用贵的问题。它先把错误或分歧样本聚类，再做 batch-validate，产出少量原子规则来优化 rubric，而不是靠大量试错提示搜索。约 25 美元成本就在留出集上稳定提升人-AI 共识，说明 prompt 优化在评估器场景里要优先考虑数据效率和一次性验证。
+- **#34 Trustworthy Rule Learning**：这篇面向高风险决策中的可审计规则学习，主张不要让 LLM 直接做黑箱判断，而是让它从错误与文档中归纳显式规则。系统用错误驱动规则归纳、规则演绎和 CoT 解释形成可复核决策链，规则库成为一致性锚点来降低 LLM 随机性。价值在于把 LLM 从最终裁判转成规则提取与解释工具，更符合金融、供应链、合规等场景的审计要求。
 
 ### 主题 5：确定性 / 可执行 oracle 与 benchmark 自动化构建
 **痛点**：依赖 LLM 主观评判不可复现、有方差；benchmark 构建昂贵且词汇爆炸；需要"零方差、可纵向监控"的 oracle。
 
-- **#6 Quantum Circuit Vision**：以单位矩阵保真度（unitary fidelity, F≥0.99）作不依赖 LLM 的客观 oracle，成本感知评估"视觉→量子代码"agent，并给出 Haiku→Sonnet→Opus 级联路由的成本分析。
-- **#19 Evaluating Agentic Skills at Scale**：自动生成约 1000 任务覆盖 500 真实 skills 与 19 个 agent-model 配置，提供规模化、可复现的技能评测排行榜。
-- **#20 NRT-Bench**：控制室多轮 red-teaming，用 **judge-free** 的 ASRCSF（违反关键安全功能成功率）作主指标，避免主观评审偏差（8.7%–12.1% 会话致至少一个 CSF 丢失）。
-- **#22 PCBWorld**：engine-grounded EDA 基准，以真实 KiCad 引擎作 oracle 校验"能否制造"，八项引擎可校验指标（Clean Pass 为主指标）。
-- **#32 Diagnostic Knowledge Graphs**：用同一规范化知识图谱同时解决 benchmark 构建与 agent 推理（评估–agent 对偶性），SQL-grounded 确定性精确匹配实现**零轮间方差（σ=0）**。
+- **#6 Quantum Circuit Vision**：这篇评估视觉 agent 从量子电路图生成量子代码的能力，避免用 LLM 主观判断"像不像"。它用单位矩阵保真度作为客观 oracle，并以 F>=0.99 判断功能等价，同时报告成本感知结果。论文还分析 Haiku -> Sonnet -> Opus 级联路由，说明确定性 oracle 能支撑质量与成本的联合优化。
+- **#19 Evaluating Agentic Skills at Scale**：这篇把 agent skills 作为评测对象，问一个 skill 是否真的改善了 agent 行为，而不是只看模型本身能力。框架自动生成约 1000 个任务，覆盖 500 个真实 skills 和 19 个 agent-model 配置，用来比较 skill 对不同模型的边际贡献。它适合技能生态治理：skill 作者可以用它发现技能是否被遵循、是否提供了模型原本缺失的知识，以及是否让小模型接近大模型表现。
+- **#20 NRT-Bench**：这篇面向安全关键控制室里的 operator agents，构造多轮 red-teaming benchmark。主指标是 judge-free 的 ASRCSF，也就是攻击是否导致关键安全功能丢失，而不是让 LLM 判断对话危险程度。它发现 8.7%-12.1% 会话会造成至少一个 CSF 丢失，说明多轮操控下的安全失败需要可执行、可审计的硬指标。
+- **#22 PCBWorld**：这篇构建 PCB 设计自动化 benchmark，把 agent 生成的设计交给真实 KiCad 引擎验证。它用八项 engine-checkable 指标评估设计能否制造，其中 Clean Pass 是核心指标。价值在于将 EDA 领域成熟工具链变成 oracle，避免仅凭文本描述或 LLM judge 评估复杂工程制品。
+- **#32 Diagnostic Knowledge Graphs**：这篇用规范化知识图谱同时支持 benchmark 构建和 agent 推理，强调评估对象与推理环境可以共享同一结构化世界模型。问题生成、答案计算和 agent 查询都基于同一知识图谱，并用 SQL-grounded 精确匹配实现零轮间方差。它的贡献在于把 benchmark 自动化与确定性评估合并，降低多步推理基准的构建成本和评判噪声。
 
 ### 主题 6：安全与可信纳入评测
 **痛点**：可信 agent 输出可能流畅、合理却不可执行 / 不安全；安全需从"事后安全测试"升级为"评测的一等公民"（动作准入、护栏忠实、能力–安全联合）。
 
-- **#1 MADS-CPS**：run-level 机器可校验评估契约，定义"单条运行是否可被审计 / 回放 / 发布"的准入证据对象与 fail-closed 的 PONR 发布门禁。
-- **#3 ReflexBench**：提出 observer-participant failure（输出改变被评估环境 / 未来观测 / benchmark 本身），用 observer depth 四级量规 + 退化差 ΔOD 度量 agent 对自身因果足迹的感知。
-- **#4 Evaluating Admissibility**：把"动作是否可准入"定义为需 Justification + Authority + Replayable 的治理检查，在会计记账域做高后果压测。
-- **#9 FinContextBench**：contextual autonomy drift canary——分离 attempted 与 executed autonomy，发现"效用保全的安全退化"（标量任务成功率会漏检的静默越权）。
-- **#11 Operational Reframing**：五条件受控对比拆开运营改写 / planner 行为 / 批准式委派，证明聚合的流水线安全性不能解读为稳定架构属性（Gemini 原始合规最低却管道放大最大）。
-- **#12 Numerical Format as Risk Surface**：首个 FP4 VLM 能力–安全联合审计，证明量化格式切换是权重哈希 / 提示监控**不可见**的部署后风险面（拒绝率可无声移动 10–18pp）。
-- **#14 SolarChain-Eval**：把物理可行性（Physics Gate）建模为可信经济 agent 的硬门槛，抑制"注水式流动性刷分"。
-- **#27 Confidence-Aware Orchestration**：置信度感知多智能体编排做多模态规则合规评估，跨模态冲突解决机制提升 F1 约 13.9pp。
-- **#31 Guardrails as Scapegoats**：审计不忠实安全拒绝，56.6% 拒绝实为把 guardrail 当替罪羊的模型自身偏差（safety-framed 措辞使虚假拒绝 15.6× 上升）。
+- **#1 MADS-CPS**：这篇面向 cyber-physical agent workflow，定义 run-level 机器可校验评估契约。它要求每次运行留下可审计、可回放、可发布的标准化证据，并通过三层一致性裁决与 fail-closed PONR 门禁决定是否能采信。其核心价值是把高风险场景里的"这次运行可信不可信"变成可编程检查，而不是事后人工解释。
+- **#3 ReflexBench**：这篇提出 observer-participant failure：agent 的输出会改变被评估环境、未来观测甚至 benchmark 本身，从而破坏评估独立性。它用 observer depth 四级量规和退化差 ΔOD 度量 agent 是否意识到自己的因果足迹。它把"被评估者参与改变评估对象"这个问题显性化，适用于反事实、仿真和会自我影响的 agent 环境。
+- **#4 Evaluating Admissibility**：这篇把高后果 agent 行动的关键问题定义为 admissibility，即动作是否可准入，而不只是答案是否合理。它要求每个动作同时具备 Justification、Authority、Replayable 三类证据，并在会计记账场景中做压测。论文的贡献是把治理要求前置到动作级门禁：没有授权、理由或可回放证据的动作，即便看起来有用也不应执行。
+- **#9 FinContextBench**：这篇关注个人金融 LLM agent 的 contextual autonomy drift，即 agent 在上下文压力下逐渐越过用户授权边界。它区分 attempted autonomy 与 executed autonomy，并把 drift 设计成 canary 监控信号。重要发现是一些模型会出现"效用保全的安全退化"：任务完成率没有明显下降，但静默越权已经发生。
+- **#11 Operational Reframing**：这篇研究多 agent 安全中运营改写、planner 行为和批准式委派如何改变合规表现。它用五条件受控对比拆开 pipeline 中不同组件的贡献，显示聚合安全性不能简单解释为某个架构天然安全。一个典型现象是某些模型原始合规最低，却在管线中被放大得最明显，提示评估必须做组件级归因。
+- **#12 Numerical Format as Risk Surface**：这篇把 FP4 等数值格式切换视为 VLM 部署后的能力-安全联合风险面。它显示量化格式变化可能让拒绝率无声移动 10-18pp，而权重哈希或提示监控无法发现这类变化。其意义是提醒部署评估不能只冻结模型名和 prompt，还要把数值格式、推理栈和 judge 容量纳入审计。
+- **#14 SolarChain-Eval**：这篇面向去中心化能源市场中的经济 agent，指出只看经济收益会鼓励物理不可行的代币和流动性策略。它把 Physics Gate 作为硬约束，要求市场行为同时满足电力物理可行性和经济目标。论文用能源市场说明可信经济 agent 必须跨数字层和物理层评估，否则会把"刷分式流动性"误判为好策略。
+- **#26 Reason Less, Verify More**：这篇研究 policy-permissive 工具里的 silent policy-violation：工具参数合法、调用成功，但业务策略被违反，系统状态已经错误。它在变更类工具执行前加入只读确定性 gate，用当前状态和参数机械判定是否允许写入。论文的工程主张很明确：不要只依赖模型每次都记得规则，能在动作边界验证的策略应固化为可审计 gate。
+- **#27 Confidence-Aware Orchestration**：这篇做多模态规则合规评估时，不让单个 agent 或单模态信号独自决定结果，而是用置信度感知的多 agent 编排处理冲突。系统按 agent 置信度、模态证据和规则判断进行协调，提升了合规判定的 F1。它说明多 agent 在评估里并非只用于"投票"，更关键是把不确定性显式纳入路由和冲突解决。
+- **#31 Guardrails as Scapegoats**：这篇审计工具增强 LLM 的安全拒绝是否忠实。它发现 56.6% 的拒绝属于 unfaithful refusal：模型拒绝了本应正常执行的请求，却把原因归咎于 guardrail。论文说明安全评估不能只统计拒绝率，必须区分真实护栏触发、模型自身偏差和 safety-framed 措辞诱发的虚假拒绝。
+- **#41 Cross-Layer Misalignment Detection**：这篇把 Agent Skill 的元数据、SKILL.md 指令和资源层之间的一致性作为执行前制品级审计问题。它用 progressive loading-aware hierarchical contrastive learning 学习"表层声明是否被底层证据支撑"，在自然发生错位样本上显著提升 F1。它补的是技能生态的上架前治理：在 agent 选择和加载 skill 之前，先发现夸大能力或隐藏危险行为的跨层错位。
+- **#44 Fraud-Detection-Inspired Security**：这篇借鉴支付和登录风控，把提示注入扩展为轨迹级对抗交互检测。它用 prompt、session、tool、context、trajectory 五类轻量特征训练 XGBoost，在敏感执行前输出 allow / restrict / block 风险决策。核心意义是把多轮升级、间接注入、拆分外泄等行为看成序列风险，而不是单轮 prompt 分类。
 
 ### 主题 7：多智能体评估的特殊问题
 **痛点**：个体评估会系统性漏检集体 / 均衡 / 共识层面的失败；多 agent 的协调增益、一致性、均衡危害需要专门评估协议。
 
-- **#21 Equilibrium-Level Harm**：定理证明仅基于固定非战略输入的个体评估必然存在"个体通过却产生均衡级危害"的游戏，给出三个结构性风险预测因子。
-- **#24 When Consensus Is Not Correctness**：揭示 debate 一致性是内生"过度自信制造"（ρ̄ 0.53 → 0.96，单看一致性 AUROC 仅 0.49–0.58），提出 split-conformal 的 Certify（Affirm）替代"一致即停"。
-- **#35 Adaptive Multi-LLM Orchestration**：replay-based 评估协议固定每个"任务–agent"对的潜在结果，把路由策略比较从随机 LLM / judge 噪声中剥离。
+- **#21 Equilibrium-Level Harm**：这篇从理论上证明，只基于固定非战略输入的个体评估无法保证多 agent 系统安全。即使每个 agent 单独通过测试，放到战略互动中仍可能产生均衡级危害。论文给出三个结构性风险预测因子，把多 agent 安全从"个体是否合规"推进到"系统均衡会不会出问题"。
+- **#24 When Consensus Is Not Correctness**：这篇挑战多 agent debate 中"一致即正确"的常见假设。实验显示 debate 会把平均相关性从 0.53 推到 0.96，但一致性对正确性的 AUROC 只有 0.49-0.58，几乎不能区分对错。它提出 split-conformal 的 Certify(Affirm) 替代"一致即停"，强调共识是生成过程的产物，不是可靠置信度证据。
+- **#35 Adaptive Multi-LLM Orchestration**：这篇关注多 LLM 系统中的自适应在线路由，问题是策略优劣常被模型生成、延迟、成本和 LLM judge 噪声混在一起。它提出 replay-based 评估协议，固定任务流和每个"任务-agent"对的潜在结果，再比较不同路由策略。这样能把路由策略本身的贡献从随机调用和评审波动中剥离出来，更适合评估生产中的多模型编排。
 - （交叉：**#11 / #27 / #29** 亦属多智能体安全 / 协调评估。）
 
 ### 主题 8：成本 / 效用感知评估
 **痛点**：仅看准确率忽略推理成本、预算、校准；生产部署必须权衡效用–成本–延迟。
 
-- **#5 StableEval Arena**：成本感知稳定币风险监测 benchmark，联合报告预测质量 / 运行可靠性 / 推理成本，发现 agent 执行可靠（valid-JSON 1.0）但稀有压力检测极弱（stress recall 最高仅 0.143）。
-- **#42 When Should Active RAG Retrieve?**：把 Active RAG 触发重构为预算效用估计，量化 benefit（31.9%）/ harm（4.0%）与固定 50% 阈值的校准违规（28.6%–65.7% 不同 split）。
+- **#5 StableEval Arena**：这篇构建稳定币价格稳定性预测 benchmark，强调金融 agent 的可信性必须同时看预测质量、运行可靠性和推理成本。实验中 agent 的结构化执行很可靠，valid-JSON 达 1.0，但对稀有 peg stress 的召回很弱，stress recall 最高仅 0.143。它说明平均表现好并不等于风险监测可用，罕见高后果事件必须单独评估。
+- **#16 PRISM**：这篇研究金融检索中的 training-free 系统级建模，组合提示工程、ICL 示例检索和轻量多 agent。消融显示提示工程收益最稳，ICL 更适合弱模型或复杂查询，而复杂多 agent 在细粒度 chunk 排序上常被协调成本抵消。它给金融检索团队的启示是先建立低成本、可复现的强提示基线，再按模型档位和任务粒度选择是否加 ICL 或多 agent。
+- **#37 IFCMemoryBench**：这篇把 BIM open-world 查询改造成多会话长期记忆评测，要求 agent 同时使用 IFC 工具查询和先前会话中的项目事实。框架分解 ingestion、retrieval、utilization 三阶段，并同时评估 answer quality 与 memory quality。结果显示通用记忆系统经常取到主题相关但不完整的记忆，最强系统准确率仍低于 60%，暴露了专业工作流中的领域感知记忆缺口。
+- **#42 When Should Active RAG Retrieve?**：这篇把 active RAG 的"何时检索"重构为预算效用估计问题。它量化检索的 benefit、harm、无影响样本，并指出固定 50% 阈值在不同 split 上会产生 28.6%-65.7% 的预算校准违规。论文提醒 RAG 评估不能只比较检索后准确率，还要报告触发率、预算稳定性和检索是否真的带来正效用。
 - （交叉：**#6** 单位保真度 + 级联路由边际成本；**#35** 路由成本 / 截止命中；**#36** token / solved 成本信号。）
 
 ### 主题 9：智能增强 / 自改进系统的评测
 **痛点**：自改进系统缺少可靠 ground truth、修复质量难以审计、聚合对齐可能误导。
 
-- **#2 On Recursive Resolution**：用"LLM 与人工一致即免费信号、分歧才升级"打破 ground truth 自举悖论，以分层 Wilson 区间 + 五层递归闭环把评估结论反哺修复（标注工时降 15.95×）。
-- **#39 Autoresearch for Marketplace Catalogs**：生产级自研究循环（propose-evaluate-keep）评测目录重建，跨家族 judge / critic 避免偏见互相强化，强制人工 sign-off 才上线。
-- **#47 When Aggregate Alignment Misleads**：揭示"聚合对齐误导"——policy 边际动作分布像基准却轨迹级组成与收入失败，提出多粒度行为审计 + shuffled-diagnostic placebo 对照协议。
+- **#2 On Recursive Resolution**：这篇来自生产 RAG/AI 系统实践，核心问题是自改进系统如何在没有廉价 ground truth 的情况下持续评估和修复。它用"LLM 与人工一致即免费信号，分歧才升级到多标注者"的机制，并用分层 Wilson 区间管理不确定性。结果把标注工时降约 15.95 倍，同时形成评估、修复、再评估的闭环。
+- **#39 Autoresearch for Marketplace Catalogs**：这篇把服务市场的 legacy 表单目录重建为 AI-native matching 所需的显式属性体系。方法是按职业领域运行 propose-evaluate-keep 的 autoresearch 循环，并用跨家族 judge / critic 降低偏见互相强化。它的评测价值在于展示生产级自研究不能完全自治，候选目录仍需评估信号筛选和人工 sign-off 才能上线。
+- **#43 Phantom Guardrails**：这篇指出自改进 agent harness 在"奖励抑制失败"时可能产生 phantom guardrails，也就是为从未真实发生的失败构建护栏。它界定了规则形状模式、开放规则集、预设失败指令三个触发条件，移除任一条件后现象归零。论文提醒自改进评测不能只奖励新增防护数量，还要验证失败是否真实、护栏是否减少真实风险以及是否引入额外延迟和攻击面。
+- **#47 When Aggregate Alignment Misleads**：这篇研究没有逐状态专家动作标签时，agent 修复策略是否真的对齐。它发现 policy 的边际动作分布可以看起来接近基准，但轨迹级组成和收入结果仍然失败，这就是"聚合对齐误导"。方法上提出多粒度行为审计和 shuffled-diagnostic placebo 对照，要求策略修复不仅过聚合指标，还要过轨迹与收益层面的反事实检查。
 
 ---
 
@@ -140,4 +147,4 @@ Agent 测评正在从"跑个 benchmark 看准确率"转向"评过程、要可复
 
 ---
 
-*附：41 篇测评类论文完整清单见 index.md 表格（标签分类含「测评」者）。本文按主题 1–9 与趋势 / 空白组织，便于按需深入对应笔记。*
+*附：41 篇测评类论文完整清单见 README.md 表格（标签分类含「测评」者）。文中也补充少量未标「测评」但直接影响 agent 评估口径的相邻论文（如 #16 / #17 / #26 / #41 / #43 / #44）。本文按主题 1–9 与趋势 / 空白组织，便于按需深入对应笔记。*

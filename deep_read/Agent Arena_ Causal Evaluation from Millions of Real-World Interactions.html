@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Arena 精读笔记 · Keynote 重建</title>
+  <script>
+    MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    body { max-width: 860px; margin: 0 auto; padding: 2rem; font-family: 'Georgia', serif; color: #222; line-height: 1.75; background: #fafaf8; }
+    h1 { font-size: 1.6rem; border-bottom: 2px solid #333; padding-bottom: 0.4rem; margin-top: 2rem; }
+    h2 { font-size: 1.2rem; color: #444; margin-top: 1.8rem; }
+    h3 { font-size: 1rem; color: #555; }
+    .paper-card { background: #f0ede6; border-left: 4px solid #8b7355; padding: 1rem 1.2rem; border-radius: 4px; margin: 1.2rem 0; }
+    .paper-card p { margin: 0.3rem 0; }
+    .claim-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .claim-table th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    .claim-table td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.78rem; font-family: monospace; }
+    .badge-strong { background: #d4edda; color: #155724; }
+    .badge-weak   { background: #fff3cd; color: #856404; }
+    .badge-unsup  { background: #f8d7da; color: #721c24; }
+    .mermaid { margin: 1.2rem 0; }
+    blockquote { border-left: 3px solid #bbb; margin: 1rem 0; padding: 0.5rem 1rem; color: #555; font-style: italic; }
+    code { background: #f0ede6; padding: 0.1rem 0.3rem; border-radius: 2px; font-size: 0.88em; }
+    pre { background: #f0ede6; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .tag { display: inline-block; background: #e8e4db; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.8rem; margin: 0.1rem; }
+    nav { position: sticky; top: 0; background: #fafaf8ee; border-bottom: 1px solid #ddd; padding: 0.5rem 0; margin-bottom: 1.5rem; font-size: 0.85rem; z-index: 10; }
+    nav a { margin-right: 1rem; color: #5a4a3a; text-decoration: none; }
+    nav a:hover { text-decoration: underline; }
+    .footnote { font-size: 0.82rem; color: #777; border-top: 1px solid #ddd; margin-top: 2.5rem; padding-top: 0.8rem; }
+    table.crit { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.crit th { background: #e8e4db; text-align: left; padding: 0.5rem 0.7rem; }
+    table.crit td { border-top: 1px solid #ddd; padding: 0.5rem 0.7rem; vertical-align: top; }
+    .recon { background: #fbf3e0; border-left: 4px solid #c79a3a; padding: 0.7rem 1rem; border-radius: 4px; margin: 1.2rem 0; font-size: 0.9rem; color: #5a4a2a; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#card">Paper Card</a>
+  <a href="#overview">整体认知</a>
+  <a href="#method">方法</a>
+  <a href="#ledger">证据账本</a>
+  <a href="#critique">批判评价</a>
+  <a href="#use">研究用途</a>
+  <a href="#appendix">附录图</a>
+</nav>
+
+<div class="recon">
+  ⚠️ <strong>重建说明：</strong>本页面为基于本仓库 <code>kdd2026_observation.md</code>「Keynote 专场」记录的<strong>重建精读</strong>。Agent Arena 是 Thu Le（Arena Intelligence, arena.ai）在 KDD 2026 Workshop Industry Talk 中展示的大规模 agent 评估平台，原平台 / 论文暂无本地 PDF 原文；具体数字与因果方法以正式演讲 / 平台披露为准。以下结构沿用 deep_read/ 既有精读模板，内容依据观察笔记还原，非逐页通读。
+</div>
+
+<h1>Agent Arena：从数百万真实交互做 Agent 因果评估（精读 · Keynote 重建）</h1>
+
+<div class="paper-card" id="card">
+  <p><strong>标题：</strong>Agent Arena: Causal Evaluation of AI Agents from Millions of Real-World Interactions（Industry Talk 题名）</p>
+  <p><strong>作者 / 机构：</strong>Thu Le · Arena Intelligence（arena.ai）</p>
+  <p><strong>Venue / 年份：</strong>KDD 2026 Workshop「Evaluation and Trustworthiness of Agentic AI」Industry Talk；2026</p>
+  <p><strong>来源：</strong>基于 kdd2026_observation.md「Keynote 专场」记录重建；原平台 / 论文暂无本地 PDF 原文</p>
+  <p><strong>领域 / 任务：</strong>大规模 / 生产级 Agent 评估平台；因果推断驱动的 agent 排名，而非离线固定 benchmark</p>
+  <p><strong>一句话平台：</strong>用因果推断从随机化的真实 trace 数据给 agent 排名，而非依赖固定 benchmark 的离线评测；平台已积累 8200 万条人类偏好投票、每周 16 万任务、4000 万行代码、200 万次工具调用。</p>
+  <p>
+    <span class="tag">agent-eval-platform</span><span class="tag">causal-inference</span><span class="tag">human-preference</span>
+    <span class="tag">production-eval</span><span class="tag">keynote</span><span class="tag">reconstruction</span>
+  </p>
+  <p><strong>阅读决策：</strong><span class="badge badge-weak">精读（重建）</span> 理由：作为 keynote 展示的"评估从实验室走向生产"形态，与本仓库 #30（judge 选择）、#45（任务预算）、#46（生命周期监控）形成对照，价值在"真实分布 + 因果排名"的工程范式，适合拆其数据规模与方法论边界。</p>
+</div>
+
+<h2 id="overview">整体认知</h2>
+
+<p><strong>问题。</strong>主流 agent 评估多是"跑一遍固定 benchmark 看分数"。但当 agent 进入生产环境，面对的是真实用户分布、工具调用轨迹、人类偏好信号等复杂且持续变化的数据流。固定离线 benchmark 无法回答：在真实流量下，哪个 agent 真的更好？分数差异是真实能力差异，还是采样噪声？</p>
+
+<p><strong>先前局限。</strong>离线 benchmark 把评估当成一次性实验，既不随真实分布漂移更新，也难以处理"用户 / 任务 / 工具"三者交织的混淆——直接比较两台 agent 的分数，可能只是因为它们碰巧分到了不同难度的任务。</p>
+
+<p><strong>核心思想。</strong>把 agent 评估做成一个<em>持续运行的系统</em>，并用<em>因果推断</em>从随机化的真实 trace 数据中做 agent 排名。关键是用因果方法（而非朴素分数对比）剥离任务难度、用户偏好等混淆变量，使排名在真实分布下可信。</p>
+
+<p><strong>主要贡献（平台形态 + 规模数字）。</strong>Arena 展示了一个大规模生产级 agent 评估平台的运行数据：</p>
+<ul>
+  <li><strong>8200 万条</strong>人类偏好投票（human preference votes）已积累；</li>
+  <li><strong>每周 16 万</strong>任务（tasks/week）；</li>
+  <li><strong>每周 4000 万</strong>行代码生成（lines of code/week）；</li>
+  <li><strong>200 万次</strong>工具调用（tool calls）。</li>
+</ul>
+<p>方法论上主张：在足够大的用户基数下，人类反馈可以成为评估体系的核心组件，而不仅是 LLM judge 的校准参考。</p>
+
+<p><strong>主要证据（平台运营数据，keynote 披露）。</strong>上述规模为平台已运行产生的累计 / 周度指标（keynote 直接给出）。这些数字支撑"人类反馈可成为评估核心"的论点，但属于平台运营披露，非受控实验结果（见证据账本）。</p>
+
+<h2 id="method">方法</h2>
+
+<p>原工作无本地 PDF，以下依据 keynote 描述还原其"生产级因果评估"架构（非原文图）。</p>
+
+<h3>1. 从离线 benchmark 到持续运行的因果评估系统</h3>
+<div class="mermaid">
+flowchart TD
+  A[真实用户交互<br/>任务 / 工具调用 / 代码] --> B[随机化真实 trace 数据]
+  B --> C[因果推断剥离混淆<br/>任务难度 / 用户偏好]
+  C --> D[agent 因果排名<br/>非朴素分数对比]
+  D --> E[持续运行系统<br/>随真实分布更新]
+  F[8200万人类偏好投票] --> C
+  G[每周16万任务 / 4000万行代码 / 200万工具调用] --> A
+</div>
+
+<h3>2. 与人类反馈 / LLM judge 的定位对照</h3>
+<div class="mermaid">
+flowchart LR
+  subgraph 传统离线
+    G1[固定 benchmark<br/>一次性跑分]
+  end
+  subgraph Agent Arena
+    H1[真实分布数据流<br/>+ 因果推断排名]
+  end
+  G1 -->|局限: 不随分布漂移| X[分数可能含混淆]
+  H1 -->|人类反馈为核心| Y[大基数下可信排名]
+  Z[LLM judge 仅作校准参考] -.-> H1
+</div>
+
+<p><strong>关键设计选择（范式亮点）。</strong></p>
+<ul>
+  <li><strong>因果推断而非朴素对比：</strong>用随机化 trace 做排名，试图剥离任务 / 用户混淆，呼应本仓库 #29 噪声地板、#45 最小任务预算对"排名可信"的执念。</li>
+  <li><strong>人类反馈为核心组件：</strong>8200 万投票规模使人类偏好从"校准参考"升级为"评估核心"，区别于本仓库 #30 中 LLM judge 主导的流水线。</li>
+  <li><strong>评估即系统：</strong>明确把评估从"实验"重构为"持续运行的基础设施"，呼应 workshop 的"部署后监控"方向（本仓库 #46）。</li>
+</ul>
+
+<blockquote>keynote 核心论点（还原）：agent 评估从实验室走向生产后，不再是"跑一遍 benchmark"，而是一个持续运行的系统，需要处理真实用户分布、工具调用轨迹、人类偏好信号；在足够大的用户基数下，人类反馈可以成为评估体系的核心组件。</blockquote>
+
+<h2 id="ledger">证据账本</h2>
+
+<table class="claim-table">
+  <thead>
+    <tr><th>主张 / 计数</th><th>证据</th><th>强度</th><th>注意事项</th><th>待验证</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>平台已积累 8200 万条人类偏好投票</td>
+      <td>keynote 直接披露的平台累计运营指标</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>属运营披露，非受控统计量；投票质量（标注者一致性、偏见）未说明</td>
+      <td>投票分布与一致性报告</td>
+    </tr>
+    <tr>
+      <td>每周 16 万任务 / 4000 万行代码 / 200 万次工具调用</td>
+      <td>keynote 披露的周度吞吐指标</td>
+      <td><span class="badge badge-strong">strong</span></td>
+      <td>证明平台真实运行规模；但任务难度分布、代码质量未披露，吞吐 ≠ 评估质量</td>
+      <td>任务难度剖面与产出质量度量</td>
+    </tr>
+    <tr>
+      <td>用因果推断从随机化 trace 做 agent 排名，优于朴素分数对比</td>
+      <td>keynote 方法论主张</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>因果识别假设（如随机化是否真随机、混淆是否全被剥离）未给出论证或实验；可能与 #45 噪声地板问题同源</td>
+      <td>因果排名 vs 朴素排名的稳定性对照</td>
+    </tr>
+    <tr>
+      <td>人类反馈在大数据基下可成为评估核心，而非仅 LLM judge 校准参考</td>
+      <td>由 8200 万投票规模 + keynote 论述推断</td>
+      <td><span class="badge badge-weak">weak</span></td>
+      <td>规模支持可行性，但"核心组件"的判定标准（覆盖哪些评估维度、成本几何）未给出</td>
+      <td>人类反馈 vs LLM judge 在各维度的成本-质量权衡</td>
+    </tr>
+    <tr>
+      <td>生产级评估能处理真实分布漂移</td>
+      <td>keynote 隐含主张（持续运行系统）</td>
+      <td><span class="badge badge-unsup">unsupported</span></td>
+      <td>持续运行 ≠ 自动处理漂移；需显式监控与再训练机制，keynote 未展示</td>
+      <td>分布漂移检测与排名衰减曲线</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="critique">批判评价</h2>
+
+<table class="crit">
+  <thead><tr><th>维度</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>优点</strong></td>
+      <td>
+        <ul>
+          <li><strong>真实分布锚定：</strong>用真实流量而非合成任务评估，天然缓解本仓库 #23 构念效度、"排行榜脱离现实"的问题。</li>
+          <li><strong>因果意识稀缺：</strong>明确用因果推断处理混淆，方向与本仓库 #29/#45 对"排名可信"的关注一致且更进一层。</li>
+          <li><strong>评估即基础设施：</strong>把部署后监控（#46）从概念落到持续运行系统，契合 workshop 的 post-market monitoring 方向。</li>
+          <li><strong>人类反馈规模化：</strong>8200 万投票为"人类反馈可否成为评估核心"提供了罕见的实证规模。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺点</strong></td>
+      <td>
+        <ul>
+          <li><strong>因果识别假设未证：</strong>"随机化 trace"能否真正剥离混淆需要论证；若随机化不彻底，排名仍受混杂，且与 #45 噪声地板同源风险。</li>
+          <li><strong>运营披露 ≠ 受控证据：</strong>规模数字亮眼，但无对照实验证明因果排名优于朴素排名或离线 benchmark。</li>
+          <li><strong>投票质量黑洞：</strong>8200 万投票的标注者偏见、对齐偏差、是否含对抗性偏好均未披露；人类反馈本身也可能被操纵（见 #31 护栏替罪羊式的偏差）。</li>
+          <li><strong>可重复性为零：</strong>平台闭源、数据非公开，外部无法复现或交叉验证任何结论。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>隐含假设</strong></td>
+      <td>
+        <ul>
+          <li>大规模人类偏好可代表"真实质量"——但偏好可能被界面、默认选项、群体偏见塑造。</li>
+          <li>随机化在真实产品中可行且伦理合规——生产环境随机化 agent 可能影响真实用户体验。</li>
+          <li>因果排名稳定于分布漂移——需持续监控，未展示。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>复现风险</strong></td>
+      <td>
+        <ul>
+          <li>无本地原文 / 公开数据，完全不可复现。</li>
+          <li>因果方法的具体识别策略（匹配 / IV / 随机化设计）未公开。</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>缺失对照</strong></td>
+      <td>
+        <ul>
+          <li>未与离线 benchmark（如本仓库 #28/#45 涉及的 SWE-bench 等）做同 agent 对照，无法量化"真实分布 + 因果"带来的增量。</li>
+          <li>未讨论与 LLM judge 流水线（#30）的成本对比——人类反馈标注成本高昂。</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="use">研究用途</h2>
+
+<p><strong>可复用的设计。</strong></p>
+<ul>
+  <li><strong>因果排名范式：</strong>任何对比两台 agent 的场景，先用因果方法剥离任务 / 用户混淆，而非直接比分数（呼应 #29/#45）。</li>
+  <li><strong>评估即监控系统：</strong>把评估从一次性实验升级为持续运行基础设施，接入真实流量与偏好信号，是本仓库 #46 生命周期监控的工业实现样板。</li>
+  <li><strong>人类反馈规模化：</strong>在足够基数下把人类偏好作为一等评估信号，可部分替代 LLM judge（#30）。</li>
+</ul>
+
+<p><strong>应规避的设计。</strong></p>
+<ul>
+  <li>不要用朴素分数对比做 agent 排名——混淆变量会伪造差异。</li>
+  <li>不要以为"大规模投票"自动等于"高质量评估"——需披露投票偏见与一致性。</li>
+</ul>
+
+<p><strong>后续 / 相关论文。</strong></p>
+<ul>
+  <li>本仓库 #30 Selecting LLM Judges、#45 How Many Tasks Are Enough、#46 Outcome Is Not Enough（生命周期监控）。</li>
+  <li>Chatbot Arena / LMSYS 的人类偏好排行方法；因果推断在 A/B 与 ranking 中的应用。</li>
+</ul>
+
+<p><strong>可能的研究方向。</strong></p>
+<ul>
+  <li>公开因果识别策略与随机化设计，接受 #45 式的最小任务预算 / 噪声地板检验。</li>
+  <li>把人类偏好与 LLM judge 做成本-质量权衡（#30 框架），给出"何时用人类、何时用 judge"的准则。</li>
+  <li>显式建模分布漂移下的排名衰减，接本仓库 #46 的 discipline stability 监控。</li>
+</ul>
+
+<h2 id="appendix">附录图</h2>
+<p>原平台 / 论文暂无本地 PDF 原文，<strong>无原图可内嵌</strong>。方法节已用两张 Mermaid 图还原其"生产级因果评估"架构与对离线 benchmark 的突破；正式论文 / 平台披露后建议回看原文 Figure 核对因果识别策略与投票质量报告。</p>
+
+<p class="footnote">Generated by 重建（依据 kdd2026_observation.md「Keynote 专场」Thu Le 段）· 2026-08-15 · 非逐页通读，原平台 / 论文暂无本地 PDF 原文；具体数字与方法以正式演讲 / 平台披露为准。</p>
+
+<script>mermaid.initialize({startOnLoad:true, theme:'neutral'});</script>
+</body>
+</html>
