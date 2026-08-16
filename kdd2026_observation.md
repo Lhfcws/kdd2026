@@ -1,4 +1,4 @@
-# KDD 2026 Agentic AI 评估 Workshop 观察笔记
+# KDD 2026 "Evaluation and Trustworthiness of Agentic AI" Workshop 观察笔记
 
 KDD 2026 在济州岛举办，其中 "Evaluation and Trustworthiness of Agentic AI" workshop 收录了 49 篇论文，加上 4 场 keynote 和 industry talk。以下观察基于本工作区已整理的 47 篇论文速读笔记。
 
@@ -71,16 +71,12 @@ Jian Pei 的整体立场是，agent 评估需要接受"混乱的、分布式的�
 
 **Jun (Luke) Huan（AWS AI Labs）** 的 industry talk "Harness Evaluation and Optimization in Coding Agents" 聚焦编码 agent 中模型推理与工具执行之间的"意图-执行鸿沟"（intent-execution gap）。他介绍了 Simple Strands Agent（SSA），一个轻量级、完全开源的单 agent harness，核心理念是通过缩小意图-执行鸿沟来提升性能，而非依赖任务特定的调优。在第 36 号论文（脚手架效应）的视角下，这个 talk 可以看作是从工业界角度对"harness 设计至关重要"这一论点的印证——AWS 选择将 harness 本身作为优化对象，说明 harness 已经被视为编码 agent 技术栈中的独立变量而非附属品。
 
-## 四、简单展望
+## 四、高亮小结与展望
 
-1. **构念效度审计会成为 benchmark 发布的标配。** 就像论文需要 ablation study，未来发布 agent benchmark 可能需要附带构念效度分析。第 23 号提出的 D1-D5 五个 desiderata 可能成为社区参考标准。
-
-2. **多 agent 研究会进入一段冷静期。** 从今年的论文基调看，社区对多 agent 协调增益的宣称会更加谨慎。协调噪声地板、多样性崩溃、均衡级危害这些概念会逐渐成为多 agent 论文必须讨论的基线。
-
-3. **harness/scaffold 会成为评估中的一等公民。** 如果 harness 能造成 40 倍的效率差异，评估报告就需要明确标注 harness 配置，和现在标注模型版本一样。
-
+1. **效度的概念会逐渐变得更重要。** 就像论文需要 ablation study，未来发布 agent benchmark 可能需要附带构念效度分析。第 23 号提出的 D1-D5 五个 desiderata 可能成为社区参考标准。实际上测量心理学里的效度概念除了构念效度，还包括内容效度、效标效度，计算机领域 agent 评估由于更接近真实物理世界和人类，面临的问题复杂性和评测模糊性最终也会走到其他学科早已走过的部分路径。
+2. **agent 落地与评测的领域化。** 本次会议的多篇论文是从一些很具体的领域或案例出发的去讨论 Agent 相关问题（评测占多数），包括Coding、酒店订单、酒店定价、能源、量子、经济等。Agent 由于解决的问题具有更高的模糊性，相比于试图定义通用 Agent 的效度，把问题收敛到具体的领域或场景能带来的明确性会更高。
+3. **harness/scaffold 会成为评估中的一等公民。** 如果 harness 能造成 40 倍的效率差异，评估报告就需要明确标注 harness 配置，和现在标注模型版本一样。在更多的评测场景，LLM 逐渐会降级成控制变量之一。
 4. **过程级评估和 trace 标准化会加速。** 当"结果不够"成为共识，trace 格式、可观测性标准、生命周期评估框架的需求会上升。MADS-CPS 的三层检查、ACID-Bench 的确定性故障注入、DutyFormer 的神经符号 trace 检测，代表了三种不同的技术路线。
-
 5. **部署后监控（post-market monitoring）会成为一个独立方向。** Workshop 的 Call for Contributions 将其列为第一项，说明工业界需求明确。模型更新、API 变更、用户分布漂移带来的 agent 行为退化，目前还缺乏系统化的检测手段。
 
 总体来看，KDD 2026 这批 agent 工作传递了一个清晰的信号：agent 领域正在从"能不能做"进入"做得可靠不可靠"的阶段。评测方法论本身成为研究对象，这通常是一个领域开始成熟的标志。

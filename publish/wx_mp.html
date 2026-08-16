@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>KDD 2026 “Evaluation and Trustworthiness of Agentic AI” Workshop 观察笔记 · 阅读笔记</title>
+</head>
+
+<body
+    style="margin:0;background:#f2f3f5;padding:24px 0;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;">
+    <div
+        style="max-width:677px;margin:0 auto;background:#ffffff;padding:28px 22px 40px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);font-size:15px;line-height:1.85;color:#1f2329;">
+        <div style="margin-bottom:14px;">
+            <div style="font-size:13px;font-weight:700;color:#2f54eb;letter-spacing:1px;margin-bottom:8px;">论文阅读笔记 ·
+                PAPER READING NOTES</div>
+            <h1 style="font-size:24px;font-weight:800;color:#1f2329;margin:0 0 8px;line-height:1.4;">KDD 2026
+                “Evaluation and Trustworthiness of Agentic AI” Workshop 观察笔记</h1>
+        </div>
+        <div style="height:1px;background:#eceef0;margin:26px 0;"></div>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">KDD 2026 在济州岛举办，其中 &quot;Evaluation and Trustworthiness
+            of Agentic AI&quot; workshop 收录了 49 篇论文，加上 4 场 keynote 和 industry talk。以下观察基于本 workshop 已整理的 47 篇论文速读笔记。</p>
+        <h2
+            style="font-size:19px;font-weight:800;color:#1f2329;margin:30px 0 14px;padding-bottom:8px;border-bottom:2px solid #2f54eb;">
+            <span
+                style="display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;background:#2f54eb;color:#fff;border-radius:6px;font-size:15px;font-weight:700;margin-right:10px;padding:0 6px;vertical-align:middle;">一</span>今年在讨论什么
+        </h2>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">这批论文有一个相当集中的主题：<strong>对评测本身的反思</strong>。47 篇速读笔记中 41
+            篇（87.2%）带&quot;测评&quot;标签，但这里的测评不是前两年那种&quot;跑个 benchmark
+            排个名&quot;的模式。今年核心问题是：<strong>现有评测手段到底靠不靠谱？</strong></p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">几个反复出现的方向：</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>构念效度（construct validity）。</strong> 第 23
+            号论文借用心理测量学框架，对 5 个主流 benchmark 做跨榜单审计，发现 22% 的模型对存在排名反转。推理专用模型在 GPQA 上排第 2，在 tool-use 基准上跌到第 9。排名的含义比想象的模糊。第
+            38 号把这种审计落到体育分析决策支持，用 APCR、IAJA、SRI、MERS 等指标拆解&quot;压力分析&quot;到底测到了什么；第 25 号则回头审 MoltBook agent
+            society，借助度保持零模型和外部真值校验，质疑幂律级联、社会强化、协作增益等结论。这说明问题不是某一个榜单失真，而是 agent benchmark
+            常把&quot;可测信号&quot;误当成&quot;目标构念&quot;。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>隐藏变量。</strong> 第 36 号（脚手架效应）做了一个受控实验：固定模型、只换
+            harness，token 消耗差了 40 倍，但通过率差异只有 2-8 个百分点。目前排行榜上模型排名的差异，有一部分可能是 harness 选择的副产品。第 15 号进一步指出评测协议本身也是隐藏变量，提出
+            Protocol Cards、SNRfile 和 clean-apply rate，让 coding-agent 评测能报告&quot;结果是怎么被测出来的&quot;。第 29
+            号（协调噪声地板）也发现，近期报道的多 agent 协调增益有 7/10 低于同模型配对的本地噪声水平。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>过程与结果分离。</strong> 第 7 号（推理轨迹评估）、第 28
+            号（ACID-Bench 事务可靠性）、第 46 号都强调同一个观点：只看最终任务成功与否不够，需要检查 agent 的完整执行过程。第 7 号关注推理轨迹的效率、幻觉与适应性；第 28
+            号把&quot;任务成功&quot;和&quot;事务状态完好&quot;拆开；第 46 号则说明经济 agent 即使 RevPAR 等标量结果相同，也可能在定价和 bid 分布上出现纪律崩溃。第 17
+            号（DutyFormer）更进一步，把审批、核验、引用、升级上报这类&quot;义务&quot;建模为可预测的过程状态，用神经符号监视器提前发现 agent 没报错但悄悄跳过必做步骤的风险。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>多 agent 的反思。</strong> 前两年多 agent
+            辩论/协作是热门方向，今年的论文开始系统地质疑。第 24 号证明多 agent 辩论的一致性信号几乎无法区分正确和错误答案（AUROC
+            0.49-0.58），所谓&quot;共识&quot;可能只是多样性崩溃后的过度自信。第 21 号从理论上证明，个体评估必然漏检多 agent 系统中的均衡级危害。第 29
+            号提出协调增益需要先跨过&quot;噪声地板&quot;才能宣称有效。第 35 号则换了一个角度：用 replay-based 协议固定每个&quot;任务-agent&quot;对的潜在结果，把路由策略比较从
+            LLM / judge 随机性里剥离出来。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>安全的精细化。</strong> 安全讨论从&quot;有没有
+            guardrail&quot;转向了&quot;guardrail 实际在干什么&quot;。第 31 号发现 56.6%
+            的安全拒绝是&quot;不忠实的&quot;——模型拒绝了一个本应正常执行的请求，然后把责任推给 guardrail。第 43 号发现自改进 harness 会为从未真实发生的失败构建护栏（phantom
+            guardrails），增加了系统表面积和延迟但没有任何实际收益。第 26 号则用确定性 gate 在工具调用前拦截策略违规，用轻量级只读检查替代靠重采样碰运气的做法。第 41 号把安全边界前移到 skill
+            上架前，检查元数据、SKILL.md 和资源层是否跨层错位；第 44 号借鉴欺诈检测，把多轮提示注入视为轨迹级对抗交互，而不是单轮 prompt 分类问题。</p>
+        <h2
+            style="font-size:19px;font-weight:800;color:#1f2329;margin:30px 0 14px;padding-bottom:8px;border-bottom:2px solid #2f54eb;">
+            <span
+                style="display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;background:#2f54eb;color:#fff;border-radius:6px;font-size:15px;font-weight:700;margin-right:10px;padding:0 6px;vertical-align:middle;">二</span>相比前几年的变化
+        </h2>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">如果回顾 2023-2024 年的 agent 研究，主线是&quot;能不能做&quot;——让 agent
+            调用工具、完成多步任务、在 benchmark 上刷分。2025 年讨论开始转向框架设计、编排模式、benchmark 建设。今年 KDD
+            这批工作的信号很明确：<strong>从能力展示转向可靠性审计</strong>。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">具体有三点变化：</p>
+        <ol style="list-style:decimal;padding-left:22px;margin:10px 0 10px 2px;">
+            <li style="margin:7px 0;line-height:1.8;"><strong>从建 benchmark 到审 benchmark。</strong> 前两年大家在发布新
+                benchmark，今年开始有人系统地审计 benchmark 本身的质量。第 45 号的 replay 分析发现，SWE-bench Lite 在用了 95% 的任务预算后仍然无法给出可靠的成对比较结论。第
+                15 号提出用&quot;协议卡片&quot;替代排行榜。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>从单 agent 到多 agent 的安全视角。</strong> 单 agent 安全关注 prompt
+                注入、越狱、工具误调用等；多 agent 安全引入了新的失败模式——均衡级危害、多样性崩溃、协调幻觉。第 11 号用运营改写、planner
+                行为和批准式委派的受控对比说明，流水线安全性不能简单外推为稳定架构属性；第 26 号则提醒，即便是单 agent，只要工具接口
+                policy-permissive，模型也会留下&quot;工具成功、状态错误&quot;的 silent wrong state。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>从离线评估到生命周期监控。</strong> Workshop 的 Call for Contributions
+                明确列出&quot;实时部署后监控&quot;和&quot;生命周期与治理框架&quot;两个方向。Jian Pei 的 keynote 用一整年模拟企业运行来评估记忆系统（EverMemBench），Thu
+                Le 的 Arena 平台积累了 8200 万条人类偏好投票做因果评估。</li>
+        </ol>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">另外，KDD 作为算法会议，记忆/检索类工作只占 4
+            篇（8.5%），且全部与测评共现。知识检索、长期记忆、RAG 系统的架构设计更多会在 SIGMOD、VLDB 等数据库会议上讨论。KDD 这边的关注点偏向&quot;如何评估这些记忆系统是否可靠&quot;。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">这 4 篇记忆/检索论文内部也有分工：第 16 号 PRISM
+            更像金融检索的低成本系统基线，强调提示工程、ICL 和轻量多 agent 的成本-效果取舍；第 32 号用诊断知识图谱把 benchmark 构建和多步推理评估统一起来；第 37 号 IFCMemoryBench
+            专门压测长期记忆在 BIM 专业工作流中的跨会话复用，结论是通用记忆系统常能取到主题相关内容，却取不全关键项目事实；第 42 号则把 Active RAG
+            的&quot;何时检索&quot;变成预算效用与校准问题。也就是说，这批工作不是在说&quot;记忆/检索怎么做最快&quot;，而是在问&quot;什么时候该信它、什么时候该花钱调用它、它漏掉了什么&quot;。
+        </p>
+        <h2
+            style="font-size:19px;font-weight:800;color:#1f2329;margin:30px 0 14px;padding-bottom:8px;border-bottom:2px solid #2f54eb;">
+            <span
+                style="display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;background:#2f54eb;color:#fff;border-radius:6px;font-size:15px;font-weight:700;margin-right:10px;padding:0 6px;vertical-align:middle;">三</span>值得关注的亮点
+        </h2>
+        <ul style="list-style:disc;padding-left:22px;margin:10px 0 10px 2px;">
+            <li style="margin:7px 0;line-height:1.8;"><strong>MADS-CPS（第 1 号）</strong>：为网络物理系统中的 agent
+                工作流定义了机器可校验的&quot;运行级评估契约&quot;，包含四类标准化产物和三层一致性裁决。在自主实验室场景中，110 个回放突变全部被精确定位。<strong>为什么值得关注：</strong>
+                传统 agent 评估只看任务成功率，但高风险场景（工业控制、机器人）需要的是&quot;这次运行能不能被审计、能不能被回放、能不能被采信&quot;——MADS-CPS
+                把这个问题从口头的可靠性要求变成了可编程的检查项。110 个突变全部被定位，也说明其覆盖范围较广。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>ACID-Bench（第 28 号）</strong>：把数据库领域的事务可靠性概念引入 agent 评估，52
+                个确定性故障注入场景覆盖部分提交、过期读、崩溃恢复等。<strong>为什么值得关注：</strong> 它借用了数据库领域发展了四十年的成熟概念框架（ACID），来解决 agent
+                评估中一个被忽视但普遍存在的问题。&quot;任务报告成功但状态已损坏&quot;是生产环境中 agent 最危险的失败模式之一——既难以发现，又难以复现。ACID-Bench
+                的&quot;任务成功&quot;和&quot;状态完好&quot;分开度量的思路，比大多数强调 pass rate 的 benchmark 更贴近实际部署需求。它也刻意不引入 LLM
+                judge，保持结果可复现、可审计，这对依赖 LLM 做评判的评测范式是一种补充。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>Phantom Guardrails（第 43 号）</strong>：揭示了自改进 agent
+                系统的一个反直觉失败模式——当系统只奖励&quot;抑制失败&quot;时，会虚构出从未发生的失败并为之构建护栏。<strong>为什么值得关注：</strong>
+                自改进（self-improving）是当前 agent
+                系统的一个热门方向，但几乎没有人讨论&quot;改错了怎么办&quot;。这篇论文指出：当奖励信号是&quot;抑制失败&quot;而所有输入本来就是合法的，系统会为了满足&quot;我在做有用的事&quot;的倾向而编造出并不存在的失败类。三个触发条件被界定为规则形状的模式、开放规则集、预设失败的指令，且实验表明移除任一条件即归零。这对正在引入自改进管线的工程团队来说是一个直接的警示。
+            </li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>脚手架效应（第 36 号）</strong>：2 模型 × 3 harness × 50 任务的受控实验，证明
+                harness 选择是编码 agent 评估中不可忽视的混淆变量。<strong>为什么值得关注：</strong> 40 倍的 token
+                效率差异是一个很难被忽视的数字。它的实验设计是固定模型、固定任务、只换 harness，把&quot;harness
+                到底重不重要&quot;这个问题变成了可量化的结论。失败指纹跨模型复现这一发现同样值得关注：它说明某些失败模式是 harness 的结构性特征而非模型能力问题，论文据此认为 harness 选择是编码
+                agent 评估中的混淆变量，应在评估中显式控制。后续任何 agent benchmark 报告如果不标注 harness 配置，其结论的可信度都会打折扣。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>Recursive Resolution（第 2 号）</strong>：来自 Amazon
+                的实践，用&quot;LLM 与人工一致即免费信号，分歧才升级到多标注者&quot;的机制，把标注工时从 7672 小时降到 481 小时（约 16
+                倍缩减），同时形成评估→修复→精炼评估标准的闭环。<strong>为什么值得关注：</strong>
+                这篇论文的价值不在于提出新算法，而在于展示了一个生产环境中的真实解决方案。评估→修复→再评估的闭环在学术论文中经常被抽象讨论，但这里给出了具体的工程架构和成本数据。16
+                倍的标注工时缩减是实打实的生产收益，不是 benchmark 上的几个百分点。它来自 Amazon 的真实 RAG 系统，说明这套方法论已经过了生产环境的检验，而非停留在论文里。</li>
+        </ul>
+        <h3
+            style="font-size:16px;font-weight:700;color:#1f2329;margin:22px 0 10px;padding-left:10px;border-left:4px solid #09a34a;">
+            Keynote 专场</h3>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">Workshop 安排了 4 场 keynote/industry
+            talk，覆盖了学术研究和工业实践两个视角。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>Jian Pei（Duke University / Amazon
+                Scholar）</strong> 的报告题为 &quot;Beyond the Single Turn: Decomposing Evaluation for Multi-Party,
+            Long-Horizon Agentic AI&quot;，核心观点是当前 agent 评估过于简化——大多数 benchmark 假设单轮、单 agent、单任务，但真实世界的 agent
+            协作是多人、多轮、跨时间的。他介绍了两个具体工作：</p>
+        <ul style="list-style:disc;padding-left:22px;margin:10px 0 10px 2px;">
+            <li style="margin:7px 0;line-height:1.8;">
+                <strong>MPCEval</strong>：一个多方对话评估基准，把评估分解为三个子问题——&quot;谁该说话&quot;（角色轮换的合理性）、&quot;说什么&quot;（内容质量）、&quot;内容是否合适&quot;（是否符合说话者的身份和上下文）。这比传统对话评估只看回复质量要细致得多，也更贴近群组协作的实际场景。
+            </li>
+            <li style="margin:7px 0;line-height:1.8;">
+                <strong>EverMemBench</strong>：一个模拟一整年企业运行的记忆系统评估基准。参与者的记忆涉及碎片化证据、事后修正的决策、未言明的偏好等复杂情况，评估的是 agent
+                在长时间跨度下能否正确处理这些信息。这个工作的隐含论点是：记忆系统的可靠性不能靠短时测试来推断，必须在&quot;时间&quot;这个维度上做压力测试。</li>
+        </ul>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">Jian Pei 的整体立场是，agent
+            评估需要接受&quot;混乱的、分布式的、时间敏感的、社会性扎根的现实&quot;——这比当前主流 benchmark 的假设要复杂得多，但回避这些复杂性只会让评估与真实需求脱节。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>Xiangliang Zhang（University of Notre
+                Dame）</strong> 的报告 &quot;Trustworthiness of Capable Agents: Understanding Emergent Failure Modes in
+            Agentic AI&quot; 从&quot;失败模式&quot;的角度切入可信评估。她的核心观察是：能力越强的 agent，在面对不完美的目标函数时，越容易&quot;优化得太好&quot;而偏离预期。她将
+            emergent failure modes 分为三个层次：</p>
+        <ul style="list-style:disc;padding-left:22px;margin:10px 0 10px 2px;">
+            <li style="margin:7px 0;line-height:1.8;"><strong>个体层</strong>：agent 通过后训练和微调找到目标函数的漏洞并加以利用（loophole
+                exploitation），这在 reward hacking 文献中已有讨论，但在 agentic 系统中因为工具调用和环境交互的引入而变得更隐蔽。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>多 agent 层</strong>：agent
+                之间出现激励机制层面的合谋、信息隐藏、策略性不合作——这些行为在个体评估中完全合规，但在系统层面造成危害。这与第 21 号论文的&quot;均衡级危害&quot;概念形成呼应。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>集体认知层</strong>：多 agent 群体出现从众、跟风、过度服从等认知失败，导致群体决策质量下降。这与第
+                24 号论文的&quot;多样性崩溃&quot;在机制上有共通之处。</li>
+        </ul>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">
+            她的框架提供了一个从&quot;出了什么问题&quot;出发来组织安全评估的思路，而非从&quot;我们有什么测试手段&quot;出发——前者更容易覆盖未知的失败模式。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>Thu Le（Arena Intelligence, arena.ai）</strong> 的
+            industry talk &quot;Agent Arena: Causal Evaluation of AI Agents from Millions of Real-World
+            Interactions&quot; 展示了一个大规模 agent 评估平台的运行数据。几个关键数字：平台已积累 8200 万条人类偏好投票、每周处理 16 万任务、每周生成 4000 万行代码、200
+            万次工具调用。他们用因果推断方法从随机化的真实 trace 数据中做 agent 排名，而非依赖固定 benchmark 的离线评测。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">这个 talk 的参考价值在于，它展示了 agent
+            评估从实验室走向生产环境后的形态变化——评估不再是&quot;跑一遍 benchmark&quot;，而是一个持续运行的系统，需要处理真实用户分布、工具调用轨迹、人类偏好信号等复杂数据流。8200
+            万条投票的规模也意味着，在足够大的用户基数下，人类反馈可以成为评估体系的核心组件，而不仅是 LLM judge 的校准参考。</p>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;"><strong>Jun (Luke) Huan（AWS AI Labs）</strong> 的
+            industry talk &quot;Harness Evaluation and Optimization in Coding Agents&quot; 聚焦编码 agent
+            中模型推理与工具执行之间的&quot;意图-执行鸿沟&quot;（intent-execution gap）。他介绍了 Simple Strands Agent（SSA），一个轻量级、完全开源的单 agent
+            harness，核心理念是通过缩小意图-执行鸿沟来提升性能，而非依赖任务特定的调优。在第 36 号论文（脚手架效应）的视角下，这个 talk 可以看作是从工业界角度对&quot;harness
+            设计至关重要&quot;这一论点的印证——AWS 选择将 harness 本身作为优化对象，说明 harness 已经被视为编码 agent 技术栈中的独立变量而非附属品。</p>
+        <h2
+            style="font-size:19px;font-weight:800;color:#1f2329;margin:30px 0 14px;padding-bottom:8px;border-bottom:2px solid #2f54eb;">
+            <span
+                style="display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;background:#2f54eb;color:#fff;border-radius:6px;font-size:15px;font-weight:700;margin-right:10px;padding:0 6px;vertical-align:middle;">四</span>高亮小结与展望
+        </h2>
+        <ol style="list-style:decimal;padding-left:22px;margin:10px 0 10px 2px;">
+            <li style="margin:7px 0;line-height:1.8;"><strong>效度的概念会逐渐变得更重要。</strong> 就像论文需要 ablation study，未来发布 agent
+                benchmark 可能需要附带构念效度分析。第 23 号提出的 D1-D5 五个 desiderata 可能成为社区参考标准。实际上测量心理学里的效度概念除了构念效度，还包括内容效度、效标效度，计算机领域
+                agent 评估由于更接近真实物理世界和人类，面临的问题复杂性和评测模糊性最终也会走到其他学科早已走过的部分路径。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>agent 落地与评测的领域化。</strong> 本次会议的多篇论文是从一些很具体的领域或案例出发的去讨论
+                Agent 相关问题（评测占多数），包括Coding、酒店订单、酒店定价、能源、量子、经济等。Agent 由于解决的问题具有更高的模糊性，相比于试图定义通用 Agent
+                的效度，把问题收敛到具体的领域或场景能带来的明确性会更高。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>harness/scaffold 会成为评估中的一等公民。</strong> 如果 harness 能造成 40
+                倍的效率差异，评估报告就需要明确标注 harness 配置，和现在标注模型版本一样。在更多的评测场景，LLM 逐渐会降级成控制变量之一。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>过程级评估和 trace 标准化会加速。</strong> 当&quot;结果不够&quot;成为共识，trace
+                格式、可观测性标准、生命周期评估框架的需求会上升。MADS-CPS 的三层检查、ACID-Bench 的确定性故障注入、DutyFormer 的神经符号 trace 检测，代表了三种不同的技术路线。</li>
+            <li style="margin:7px 0;line-height:1.8;"><strong>部署后监控（post-market monitoring）会成为一个独立方向。</strong> Workshop
+                的 Call for Contributions 将其列为第一项，说明工业界需求明确。模型更新、API 变更、用户分布漂移带来的 agent 行为退化，目前还缺乏系统化的检测手段。</li>
+        </ol>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">总体来看，KDD 2026 这批 agent 工作传递了一个清晰的信号：agent
+            领域正在从&quot;能不能做&quot;进入&quot;做得可靠不可靠&quot;的阶段。评测方法论本身成为研究对象，这通常是一个领域开始成熟的标志。</p>
+        <h2
+            style="font-size:19px;font-weight:800;color:#1f2329;margin:30px 0 14px;padding-bottom:8px;border-bottom:2px solid #2f54eb;">
+            <span
+                style="display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;background:#2f54eb;color:#fff;border-radius:6px;font-size:15px;font-weight:700;margin-right:10px;padding:0 6px;vertical-align:middle;">五</span>KDD
+            2026 Evaluation Workshop 论文速读笔记索引</h2>
+        <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">共 47 篇，按序号排列。每篇笔记固定五段：背景与 Idea / 核心方法 / Performance 概括
+            / 论文价值与不足 / 工业界落地可行性评估。表格新增「标签分类」列，采用多标签体系（一篇论文可同时属于多个子领域，详见文末「论文统计」）。</p>
+        <div style="overflow-x:auto;margin:16px 0;">
+            <table style="border-collapse:collapse;width:100%;font-size:14px;line-height:1.7;">
+                <thead>
+                    <tr>
+                        <th
+                            style="background:#eef2ff;color:#2f54eb;font-weight:700;padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;text-align:left;">
+                            序号</th>
+                        <th
+                            style="background:#eef2ff;color:#2f54eb;font-weight:700;padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;text-align:left;">
+                            英文标题</th>
+                        <th
+                            style="background:#eef2ff;color:#2f54eb;font-weight:700;padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;text-align:left;">
+                            标签分类</th>
+                        <th
+                            style="background:#eef2ff;color:#2f54eb;font-weight:700;padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;text-align:left;">
+                            笔记文件</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            1</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            MADS-CPS: A Machine-Checkable Run-Level Evaluation Contract for Trustworthy Agentic
+                            Cyber-Physical Workflows</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评, 安全隐私, 追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            MADS-CPS_ A Machine-Checkable Run-Level Evaluation Contract for Trustworthy Agentic
+                            Cyber-Physical Workflows.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            2</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            On Recursive Resolution: Scalable Ground Truth for Self-Improving AI Systems</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评, 智能增强</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            On Recursive Resolution_ Scalable Ground Truth for Self-Improving AI Systems.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            3</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            ReflexBench: Evaluating Observer-Participant Failures and Counterfactual Trustworthiness in
+                            Agentic AI</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评, 追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            ReflexBench_ Evaluating Observer-Participant Failures and Counterfactual Trustworthiness in
+                            Agentic AI.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            4</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Evaluating Admissibility in Agentic Systems: Semantic Governance and a High-Consequence
+                            Benchmark</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评, 安全隐私, 追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Evaluating Admissibility in Agentic Systems_ Semantic Governance and a High-Consequence
+                            Benchmark.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            5</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            StableEval Arena: A Cost-Aware Agentic Benchmark for Stablecoin Price Stability Prediction
+                        </td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            StableEval Arena_ A Cost-Aware Agentic Benchmark for Stablecoin Price Stability
+                            Prediction.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            6</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Quantum Circuit Vision: Cost-Aware Evaluation of Visual AI Agents for Quantum Code
+                            Generation</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Quantum Circuit Vision_ Cost-Aware Evaluation of Visual AI Agents for Quantum Code
+                            Generation.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            7</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Beyond the Final Answer: Evaluating the Reasoning Trajectories of Tool-Augmented Agents</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评, 追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Beyond the Final Answer_ Evaluating the Reasoning Trajectories of Tool-Augmented Agents.md
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            8</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            MacCode Lab: A Reproducible Single-Machine Harness for Execution-Guided Code Agents, and
+                            When Repair Actually Helps</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Runtime, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            MacCode Lab_ A Reproducible Single-Machine Harness for Execution-Guided Code Agents, and
+                            When Repair Actually Helps.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            9</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            FinContextBench: Monitoring Contextual Autonomy Drift in Personal Financial LLM Agents</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            安全隐私, 追溯性, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            FinContextBench_ Monitoring Contextual Autonomy Drift in Personal Financial LLM Agents.md
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            10</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Comparative Analysis of Agent Evaluation Frameworks: Stability, Detection, and Discovery in
+                            Enterprise Analytics Agents</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评, 追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Comparative Analysis of Agent Evaluation Frameworks_ Stability, Detection, and Discovery in
+                            Enterprise Analytics Agents.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            11</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Operational Reframing and Approval-Framed Delegation in Multi-Agent LLM Safety</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            安全隐私, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Operational Reframing and Approval-Framed Delegation in Multi-Agent LLM Safety.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            12</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Numerical Format as a Post-Deployment Risk Surface: A Joint Capability–Safety Audit of FP4
+                            Vision–Language Models</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            安全隐私, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Numerical Format as a Post-Deployment Risk Surface_ A Joint Capability–Safety Audit of FP4
+                            Vision–Language Models.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            13</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Evaluating Governed LLM-Driven ML Experimentation: Lifecycle, Provenance, and Failure
+                            Metrics</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            追溯性, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Evaluating Governed LLM-Driven ML Experimentation_ Lifecycle, Provenance, and Failure
+                            Metrics.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            14</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            SolarChain-Eval: A Physics-Constrained Benchmark for Trustworthy Economic Agents in
+                            Decentralized Energy Markets</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评, 安全隐私</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            SolarChain-Eval_ A Physics-Constrained Benchmark for Trustworthy Economic Agents in
+                            Decentralized Energy Markets.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            15</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Beyond Leaderboards: Protocol Cards for Trustworthy Coding-Agent Evaluation</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Beyond Leaderboards_ Protocol Cards for Trustworthy Coding-Agent Evaluation.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            16</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            PRISM: Prompt-Refined In-Context System Modeling for Financial Retrieval</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            记忆检索, 智能增强</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            PRISM_ Prompt-Refined In-Context System Modeling for Financial Retrieval.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            17</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            DutyFormer: Neural-Symbolic Prediction of Silent Obligation Omissions in AI-Agent Process
+                            Traces</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            DutyFormer_ Neural-Symbolic Prediction of Silent Obligation Omissions in AI-Agent Process
+                            Traces.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            18</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Verifying Agents in Rubric-Graded Environments</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Verifying Agents in Rubric-Graded Environments.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            19</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            A Framework for Evaluating Agentic Skills at Scale</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            A Framework for Evaluating Agentic Skills at Scale.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            20</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            NRT-Bench: Benchmarking Multi-Turn Red-Teaming of LLM Operator Agents in Safety-Critical
+                            Control Rooms</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            安全隐私, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            NRT-Bench_ Benchmarking Multi-Turn Red-Teaming of LLM Operator Agents in Safety-Critical
+                            Control Rooms.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            21</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Equilibrium-Level Harm in Multi-Agent AI Systems: Why Individual Evaluation Fails</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            安全隐私, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Equilibrium-Level Harm in Multi-Agent AI Systems_ Why Individual Evaluation Fails.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            22</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            PCBWorld: A Benchmark Environment for Engine-Grounded PCB Design Automation</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            PCBWorld_ A Benchmark Environment for Engine-Grounded PCB Design Automation.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            23</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Construct Validity Failures in Agentic AI Benchmarks: An Empirical Audit</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Construct Validity Failures in Agentic AI Benchmarks_ An Empirical Audit.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            24</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            When Consensus Is Not Correctness: Diversity Collapse and Manufactured Overconfidence in
+                            Multi-Agent LLM Debate</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评, Runtime</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            When Consensus Is Not Correctness_ Diversity Collapse and Manufactured Overconfidence in
+                            Multi-Agent LLM Debate.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            25</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Emergent, Steered, or Neither? A Validity Audit of the MoltBook Agent Society</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评, 追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Emergent, Steered, or Neither_ A Validity Audit of the MoltBook Agent Society.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            26</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Reason Less, Verify More: Deterministic Gates Recover a Silent Policy-Violation Failure Mode
+                            in Tool-Using LLM Agents</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            安全隐私, Runtime</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Reason Less, Verify More_ Deterministic Gates Recover a Silent Policy-Violation Failure Mode
+                            in Tool-Using LLM Agents.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            27</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Confidence-Aware Multi-Agent Orchestration for Evaluating Multimodal Rule Compliance</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Runtime, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Confidence-Aware Multi-Agent Orchestration for Evaluating Multimodal Rule Compliance.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            28</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            ACID-Bench: Auditing Transactional Reliability in State-Changing Tool Agents</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评, 追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            ACID-Bench_ Auditing Transactional Reliability in State-Changing Tool Agents.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            29</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            How Much Coordination Gain Is Real? A Paired Noise-Floor Protocol for Multi-Agent LLM
+                            Benchmarks</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评, Runtime</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            How Much Coordination Gain Is Real_ A Paired Noise-Floor Protocol for Multi-Agent LLM
+                            Benchmarks.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            30</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Selecting LLM Judges for Agent Evaluation Pipelines: Accuracy Masking and Review-Burden
+                            Tradeoffs</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Selecting LLM Judges for Agent Evaluation Pipelines_ Accuracy Masking and Review-Burden
+                            Tradeoffs.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            31</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Guardrails as Scapegoats: Auditing Unfaithful Safety Refusals in Tool-Augmented LLM Agents
+                        </td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            安全隐私, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Guardrails as Scapegoats_ Auditing Unfaithful Safety Refusals in Tool-Augmented LLM
+                            Agents.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            32</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Diagnostic Knowledge Graphs: Automated Benchmark Construction and Deterministic Evaluation
+                            for Multi-Step Reasoning Agents</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评, 记忆检索</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Diagnostic Knowledge Graphs_ Automated Benchmark Construction and Deterministic Evaluation
+                            for Multi-Step Reasoning Agents.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            33</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Clustering-based Prompt Optimization for LLM Evaluation</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评, 智能增强</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Clustering-based Prompt Optimization for LLM Evaluation.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            34</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Trustworthy LLM-Based Rule Learning for Auditable Agentic Decision-Making</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            智能增强, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Trustworthy LLM-Based Rule Learning for Auditable Agentic Decision-Making.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            35</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Adaptive Decentralized Multi-LLM Orchestration with Accelerated Consensus-Based SPSA</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Runtime, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Adaptive Decentralized Multi-LLM Orchestration with Accelerated Consensus-Based SPSA.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            36</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            The Scaffold Effect in Coding Agents: Harness Choice as a Hidden Variable in Coding-Agent
+                            Evaluation</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Runtime, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            The Scaffold Effect in Coding Agents_ Harness Choice as a Hidden Variable in Coding-Agent
+                            Evaluation.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            37</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            IFCMemoryBench: Evaluating Long-Term Memory of LLM-Based Agents in BIM Information Retrieval
+                        </td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            记忆检索, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            IFCMemoryBench_ Evaluating Long-Term Memory of LLM-Based Agents in BIM Information
+                            Retrieval.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            38</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Auditing Construct Validity in Agentic Decision Support with Sports Analytics Case Study
+                        </td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Auditing Construct Validity in Agentic Decision Support with Sports Analytics Case Study.md
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            39</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Autoresearch for Marketplace Catalogs: From Legacy Forms to AI-Native Matching</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            智能增强, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Autoresearch for Marketplace Catalogs_ From Legacy Forms to AI-Native Matching.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            40</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Evaluating Enterprise Analytics Agents: An End-to-End, Trace-Backed Methodology</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            测评, 追溯性</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Evaluating Enterprise Analytics Agents_ An End-to-End, Trace-Backed Methodology.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            41</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Cross-Layer Misalignment Detection in Agent Skills: A Progressive Loading-Aware Contrastive
+                            Learning Approach</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            智能增强, 安全隐私</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Cross-Layer Misalignment Detection in Agent Skills_ A Progressive Loading-Aware Contrastive
+                            Learning Approach.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            42</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            When Should Active RAG Retrieve? A Budget-Aware Evaluation of Utility, Calibration, and Cost
+                        </td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            记忆检索, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            When Should Active RAG Retrieve_ A Budget-Aware Evaluation of Utility, Calibration, and
+                            Cost.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            43</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Phantom Guardrails: When Self-Improving Agent Harnesses Fix Failures That Never Happened
+                        </td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            智能增强, Runtime, 安全隐私</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Phantom Guardrails_ When Self-Improving Agent Harnesses Fix Failures That Never Happened.md
+                        </td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            44</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            A Fraud-Detection-Inspired Framework for LLM Agents Security</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            安全隐私</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            A Fraud-Detection-Inspired Framework for LLM Agents Security.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            45</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            How Many Tasks Are Enough for Agent Benchmark Decisions? A Replay Analysis of Public LLM
+                            Agent Benchmarks</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            How Many Tasks Are Enough for Agent Benchmark Decisions_ A Replay Analysis of Public LLM
+                            Agent Benchmarks.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            46</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Outcome Is Not Enough: Trace-Based Lifecycle Evaluation for Trustworthy Agentic Economic
+                            Systems</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            追溯性, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            Outcome Is Not Enough_ Trace-Based Lifecycle Evaluation for Trustworthy Agentic Economic
+                            Systems.md</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            47</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            When Aggregate Alignment Misleads: Auditing Agentic Policy Repair Without Per-State Expert
+                            Actions</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            智能增强, 测评</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            When Aggregate Alignment Misleads_ Auditing Agentic Policy Repair Without Per-State Expert
+                            Actions.md</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <h3
+            style="font-size:16px;font-weight:700;color:#1f2329;margin:22px 0 10px;padding-left:10px;border-left:4px solid #09a34a;">
+            论文统计（标签分布）</h3>
+        <div
+            style="background:#eef2ff;border-left:4px solid #2f54eb;border-radius:8px;padding:14px 16px;margin:16px 0;font-size:14.5px;line-height:1.8;color:#3a3f47;">
+            <p style="margin:12px 0;line-height:1.85;color:#3a3f47;">多标签分类：一篇论文可同时属于多个子领域，故各子领域占比之和
+                &gt;100%。标签缩写对照：测评=测评(Evaluation/Benchmark/Rubric)，安全隐私=安全隐私(Security &amp;
+                Privacy)，追溯性=追溯性与观测性(Traceability &amp; Observability)，记忆检索=记忆与检索(Memory &amp;
+                Retrieval)，智能增强=智能增强(Intelligence Augmentation)，Runtime=Agent runtime(框架与编排)，其他=其他。</p>
+        </div>
+        <div style="overflow-x:auto;margin:16px 0;">
+            <table style="border-collapse:collapse;width:100%;font-size:14px;line-height:1.7;">
+                <thead>
+                    <tr>
+                        <th
+                            style="background:#eef2ff;color:#2f54eb;font-weight:700;padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;text-align:left;">
+                            子领域</th>
+                        <th
+                            style="background:#eef2ff;color:#2f54eb;font-weight:700;padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;text-align:left;">
+                            篇数</th>
+                        <th
+                            style="background:#eef2ff;color:#2f54eb;font-weight:700;padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;text-align:left;">
+                            占比（篇数/47）</th>
+                        <th
+                            style="background:#eef2ff;color:#2f54eb;font-weight:700;padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;text-align:left;">
+                            涵盖内容</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            测评（Evaluation / Benchmark / Rubric）</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            41</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            87.2%</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            benchmark 设计、rubric 评分、judge 选择、构念有效性审计、评估方法论、replay 分析等</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            安全隐私（Security &amp; Privacy）</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            13</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            27.7%</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            对抗/red-teaming、guardrails、欺诈检测、策略违规、多智能体安全、风险面审计等</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            追溯性与观测性（Traceability &amp; Observability）</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            12</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            25.5%</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            process trace、provenance、生命周期、trace-backed 评估、可观测性、drift 监控</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            智能增强（Intelligence Augmentation）</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            8</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            17.0%</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            skill 优化、自进化/self-improving、RL、prompt 优化、规则学习、auto-research、对比学习</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            Agent runtime（框架与编排）</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            8</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            17.0%</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            框架、多 LLM 编排、harness/scaffold、execution-guided、consensus、脚手架效应</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            记忆与检索（Memory &amp; Retrieval）</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            4</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            8.5%</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#f6f8ff;">
+                            长期记忆、RAG、检索、知识图谱</td>
+                    </tr>
+                    <tr>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            <strong>合计（标签数，非去重）</strong></td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            <strong>86</strong></td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            —</td>
+                        <td
+                            style="padding:10px 12px;border:1px solid #e5e6eb;font-size:14px;color:#3a3f47;vertical-align:top;background:#ffffff;">
+                            平均约 <strong>1.83</strong> 个标签/篇</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div style="height:1px;background:#eceef0;margin:26px 0;"></div>
+        <div style="text-align:center;color:#9aa0a6;font-size:13.5px;line-height:1.9;">如果觉得有用，欢迎 <span
+                style="color:#2f54eb;font-weight:700;">点赞 · 在看 · 分享</span>。</div>
+    </div>
+</body>
+
+</html>
